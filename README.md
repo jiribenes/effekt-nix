@@ -5,13 +5,24 @@ A simple Nix package for the [Effekt programming language](https://github.com/ef
 ## Installation
 
 ```sh
-nix-build default.nix
+nix-build -A effekt
 ```
 
 then call `./result/bin/effekt` to invoke the Effekt compiler/interpreter.
 
+## Development
+
+If you just want a temporary shell with the Effekt compiler/interpreter inside,
+use the command:
+
+```sh
+nix-shell
+```
+
+This will spawn a new shell in which one can just call `effekt`.
+
 ## TODO
 
-- [ ] provide a Nix shell with Effekt as an input
+- [x] provide a Nix shell with Effekt as an input
 - [ ] building directly from source
 - [ ] upstreaming this to Nixpkgs
