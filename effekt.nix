@@ -1,16 +1,16 @@
-{ lib, stdenv, fetchurl, makeWrapper, jre8, nodejs }:
+{ lib, stdenv, fetchurl, makeWrapper, jre, nodejs }:
 
 stdenv.mkDerivation rec {
-  version = "0.2.0";
+  version = "0.2.2";
   pname = "effekt";
 
   src = fetchurl {
     url = "https://github.com/effekt-lang/effekt/releases/download/v${version}/effekt.tgz";
-    sha256 = "A/rMMZHY8l0n8U/pJ+0dgUF6dBlov562n6tn/bNwfgA=";
+    sha256 = "hYlJg/jpFK3FFze3udXa8lLysVOf7F0HtwALf13TcqM=";
   };
 
   nativeBuildInputs = [ makeWrapper ];
-  buildInputs = [ jre8 nodejs ];
+  buildInputs = [ jre nodejs ];
 
   installPhase = ''
     mkdir -p $out/bin $out/lib
@@ -22,7 +22,7 @@ stdenv.mkDerivation rec {
     mv libraries $out/libraries
 
     # make a wrapper script
-    makeWrapper ${jre8}/bin/java $out/bin/effekt \
+    makeWrapper ${jre}/bin/java $out/bin/effekt \
       --add-flags "-jar $out/lib/effekt.jar" \
       --prefix PATH : ${lib.makeBinPath [ nodejs ]}
   '';
