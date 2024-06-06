@@ -14,6 +14,7 @@ mkSbtDerivation {
   nativeBuildInputs = [ nodejs maven makeWrapper ];
 
   buildPhase = ''
+    export MAVEN_OPTS="-Dmaven.repo.local=$out/.m2/repository"
     sbt deploy
   '';
 

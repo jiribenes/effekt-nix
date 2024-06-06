@@ -28,9 +28,6 @@ This will spawn a new shell in which one can just call `effekt`.
 You can also use `nix-build -A effekt-nightly` to build directly from a **relative** Effekt source folder (needs setup in `default.nix`).
 Similarly you can use `nix-shell -A shell-nightly default.nix` to get a shell with `Effekt` from a relative folder.
 
-> [!WARNING]
-> You might need to modify the `build.sbt` file, see issue https://github.com/jiribenes/effekt-nix/issues/1
-
 You can also use `nix-shell -A devshell default.nix` to get the development environment necessary for developing the Effekt compiler itself.
 
 ## TODO
