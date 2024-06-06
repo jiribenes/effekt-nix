@@ -29,7 +29,7 @@ You can also use `nix-build -A effekt-nightly` to build directly from a **relati
 Similarly you can use `nix-shell -A shell-nightly default.nix` to get a shell with `Effekt` from a relative folder.
 
 > [!WARNING]
-> You might need to modify the `build.sbt` file, this is very WIP.
+> You might need to modify the `build.sbt` file, see issue https://github.com/jiribenes/effekt-nix/issues/1
 
 You can also use `nix-shell -A devshell default.nix` to get the development environment necessary for developing the Effekt compiler itself.
 
