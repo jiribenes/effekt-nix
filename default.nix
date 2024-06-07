@@ -27,12 +27,12 @@ let
   # Nightly shell with Effekt stored in `effektSrcPath` defined above in `effekt-nightly`.
   # (Node.js, LLVM, Chez backends are supported, others are not!)
   shell-nightly = pkgs.mkShell {
-    buildInputs = with pkgs; [ effekt-nightly nodejs llvm chez ];
+    buildInputs = with pkgs; [ effekt-nightly nodejs llvm libuv chez ];
   };
 
   # Development environment for working on the Effekt compiler
   devshell = pkgs.mkShell {
-    buildInputs = with pkgs; [ sbt jre llvm nodejs maven scala_3 chez ];
+    buildInputs = with pkgs; [ sbt jre nodejs llvm libuv nodejs maven scala_3 chez ];
   };
 
 in
