@@ -10,13 +10,13 @@
       inputs.flake-utils.follows = "flake-utils";
     };
     # The main repo of the Effekt language itself, together with its submodules
-    effekt-nightly = {
+    effekt-src-repo = {
       flake = false;
       url = "git+https://github.com/effekt-lang/effekt?submodules=1&allRefs=1";
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, sbt-derivation, effekt-nightly }:
+  outputs = { self, nixpkgs, flake-utils, sbt-derivation, effekt-src-repo }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -250,9 +250,9 @@
 
         # Builds the nightly version of Effekt using the flake input
         nightlyEffekt = buildEffektFromSource {
-          src = effekt-nightly;
+          src = effekt-src-repo;
           backends = builtins.attrValues effektBackends;
-          version = "0.99.99+nightly-${builtins.substring 0 8 effekt-nightly.rev}";
+          version = "0.99.99+nightly-${builtins.substring 0 8 effekt-src-repo.rev}";
         };
 
       in {
