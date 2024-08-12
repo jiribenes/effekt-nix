@@ -224,6 +224,7 @@
         nightlyEffekt = buildEffektFromSource {
           src = effekt-nightly;
           backends = builtins.attrValues effektBackends;
+          version = "0.99.99+nightly-${builtins.substring 0 8 effekt-nightly.rev}";
         };
 
       in {
