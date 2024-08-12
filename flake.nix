@@ -218,7 +218,7 @@
         # Automatically generated packages + latest version (as default) + nightly version
         packages = autoPackages // {
           default = autoPackages.${latestVersion};
-          nightly = nightlyEffekt;
+          # nightly = nightlyEffekt;
         };
 
         # Development shells
@@ -227,10 +227,10 @@
             effektVersion = latestVersion;
             backends = builtins.attrValues effektBackends;
           };
-          nightly = mkDevShell {
-            effekt = nightlyEffekt;
-            backends = builtins.attrValues effektBackends;
-          };
+          #nightly = mkDevShell {
+          #  effekt = nightlyEffekt;
+          #  backends = builtins.attrValues effektBackends;
+          #};
           compilerDev = compilerDevShell;
         };
 
