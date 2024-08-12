@@ -233,6 +233,14 @@
           };
           compilerDev = compilerDevShell;
         };
+
+        # Ready-to-run applications
+        apps = {
+          default = flake-utils.lib.mkApp {
+            drv = autoPackages.${latestVersion};
+            name = "effekt";
+          };
+        };
       }
     );
 }
