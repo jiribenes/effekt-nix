@@ -188,7 +188,7 @@
 
             # Entry point is the program called ${pname}
             meta.mainProgram = pname;
-          };
+          }
         );
 
         # Creates a dev-shell for an Effekt package / version & backends
