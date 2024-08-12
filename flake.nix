@@ -241,6 +241,8 @@
             name = "effekt";
           };
         };
+
+        checks = {};
       }
     );
 }
