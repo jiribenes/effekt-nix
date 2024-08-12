@@ -71,7 +71,11 @@
         };
 
         # Creates an Effekt derivation from a prebuilt GitHub release
-        buildEffektRelease = { version, sha256, backends ? [effektBackends.js] }:
+        buildEffektRelease = {
+          version,
+          sha256,
+          backends ? [effektBackends.js]
+        }:
           assert backends != []; # Ensure at least one backend is specified
           pkgs.stdenv.mkDerivation {
             pname = "effekt";
