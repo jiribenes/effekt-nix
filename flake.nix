@@ -56,7 +56,10 @@
             buildInputs = [pkgs.chez];
           };
         } // pkgs.lib.optionalAttrs isMLtonSupported {
-          ml = { name = "ml"; buildInputs = [pkgs.mlton]; };
+          ml = {
+            name = "ml";
+            buildInputs = [pkgs.mlton];
+          };
         };
 
         # Meta information about the Effekt programming language
@@ -96,7 +99,12 @@
           };
 
         # Creates an Effekt derivation by building Effekt from (some) source
-        buildEffektFromSource = { src, version, backends ? [effektBackends.js], depsSha256 ? "Yzv6lcIpu8xYv3K7ymoJIcnqJWem1sUWGSQm8253SUw=" }:
+        buildEffektFromSource = {
+          src,
+          version,
+          backends ? [effektBackends.js],
+          depsSha256 ? "Yzv6lcIpu8xYv3K7ymoJIcnqJWem1sUWGSQm8253SUw="
+        }:
           assert backends != []; # Ensure at least one backend is specified
           sbt-derivation.lib.mkSbtDerivation {
             inherit pkgs;
@@ -189,7 +197,11 @@
         );
 
         # Creates a dev-shell for an Effekt package / version & backends
-        mkDevShell = { effekt ? null, effektVersion ? latestVersion, backends ? [effektBackends.js] }:
+        mkDevShell = {
+          effekt ? null,
+          effektVersion ? latestVersion,
+          backends ? [effektBackends.js]
+        }:
           let
             effektBuild = if effekt != null then effekt else buildEffektRelease {
               version = effektVersion;
