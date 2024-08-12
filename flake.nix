@@ -124,7 +124,7 @@
           };
 
         # Builds an Effekt package
-        buildEffektPackage = {
+        buildEffektPackage = pkgs.lib.makeOverridable {
           pname,                                # package name
           version,                              # package version
           src,                                  # source of the package
