@@ -13,6 +13,7 @@
     effekt-nightly = {
       flake = false;
       url = "git+https://github.com/effekt-lang/effekt?submodules=1";
+      allRefs = true;
     };
   };
 
