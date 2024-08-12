@@ -136,48 +136,49 @@
           };
 
         # Builds an Effekt package
-        buildEffektPackage = pkgs.lib.makeOverridable {
-          pname,                                # package name
-          version,                              # package version
-          src,                                  # source of the package
-          main,                                 # (relative) path to the entrypoint
-          tests ? [],                           # (relative) paths to the tests
-          effekt ? null,                        # the explicit Effekt derivation to use: uses latest release if not set
-          effektVersion ? latestVersion,        # the Effekt version to use
-          effektBackends ? [effektBackends.js], # Effekt backends to use -- first backend is the "default" one
-          buildInputs ? [],                     # other build inputs required for the package
-        }:
-          assert effektBackends != []; # Ensure at least one backend is specified
-          let
-            defaultBackend = builtins.head effektBackends;
-            effektBuild = if effekt != null then effekt else buildEffektRelease {
-              version = effektVersion;
-              sha256 = effektVersions.${effektVersion};
-              backends = effektBackends;
-            };
-          in
-          pkgs.stdenv.mkDerivation {
-            inherit pname version src;
+        buildEffektPackage = pkgs.lib.makeOverridable (
+          {
+            pname,                                # package name
+            version,                              # package version
+            src,                                  # source of the package
+            main,                                 # (relative) path to the entrypoint
+            tests ? [],                           # (relative) paths to the tests
+            effekt ? null,                        # the explicit Effekt derivation to use: uses latest release if not set
+            effektVersion ? latestVersion,        # the Effekt version to use
+            effektBackends ? [effektBackends.js], # Effekt backends to use -- first backend is the "default" one
+            buildInputs ? [],                     # other build inputs required for the package
+          }:
+            assert effektBackends != []; # Ensure at least one backend is specified
+            let
+              defaultBackend = builtins.head effektBackends;
+              effektBuild = if effekt != null then effekt else buildEffektRelease {
+                version = effektVersion;
+                sha256 = effektVersions.${effektVersion};
+                backends = effektBackends;
+              };
+            in
+            pkgs.stdenv.mkDerivation {
+              inherit pname version src;
 
-            nativeBuildInputs = [effektBuild];
-            inherit buildInputs;
+              nativeBuildInputs = [effektBuild];
+              inherit buildInputs;
 
-            buildPhase = ''
-              mkdir -p out
-              ${pkgs.lib.concatMapStrings (backend: ''
-                effekt --build --backend ${backend.name} ${main}
-                mv out/$(basename ${main}) out/${pname}-${backend.name}
-              '') effektBackends}
-            '';
+              buildPhase = ''
+                mkdir -p out
+                ${pkgs.lib.concatMapStrings (backend: ''
+                  effekt --build --backend ${backend.name} ${main}
+                  mv out/$(basename ${main}) out/${pname}-${backend.name}
+                '') effektBackends}
+              '';
 
-            installPhase = ''
-              mkdir -p $out/bin
-              cp -r out/* $out/bin/
-              ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
-            '';
+              installPhase = ''
+                mkdir -p $out/bin
+                cp -r out/* $out/bin/
+                ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
+              '';
 
-            checkPhase = pkgs.lib.concatMapStrings (test:
-              pkgs.lib.concatMapStrings (backend: ''
+              checkPhase = pkgs.lib.concatMapStrings (test:
+                pkgs.lib.concatMapStrings (backend: ''
                 echo "Running test ${test} with backend ${backend.name}"
                 effekt --backend ${backend.name} ${test}
               '') effektBackends
@@ -188,6 +189,7 @@
             # Entry point is the program called ${pname}
             meta.mainProgram = pname;
           };
+        );
 
         # Creates a dev-shell for an Effekt package / version & backends
         mkDevShell = { effekt ? null, effektVersion ? latestVersion, backends ? [effektBackends.js] }:
