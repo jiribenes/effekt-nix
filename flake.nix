@@ -212,13 +212,28 @@
         };
 
         # Automatically generated packages for all 'effektVersions' with all backends
-        autoPackages = pkgs.lib.mapAttrs (version: _:
-          buildEffektRelease {
-            inherit version;
-            sha256 = effektVersions.${version};
-            backends = builtins.attrValues effektBackends;
-          }
+        autoPackages = pkgs.lib.mapAttrs' (version: _:
+          pkgs.lib.nameValuePair "effekt_${builtins.replaceStrings ["."] ["_"] version}" (
+            buildEffektRelease {
+              inherit version;
+              sha256 = effektVersions.${version};
+              backends = builtins.attrValues effektBackends;
+            }
+          )
         ) effektVersions;
+
+        # Automatically generated devshells for all 'effektVersions' with all backends
+        autoDevShells = pkgs.lib.mapAttrs' (version: _:
+          pkgs.lib.nameValuePair "effekt_${builtins.replaceStrings ["."] ["_"] version}" (
+            mkDevShell {
+              effektVersion = version;
+              backends = builtins.attrValues effektBackends;
+            }
+          )
+        ) effektVersions;
+
+        # Quick alias for the latest pre-built Effekt derivation
+        latestEffekt = autoPackages."effekt_${builtins.replaceStrings ["."] ["_"] latestVersion}";
 
         # Builds the nightly version of Effekt using the flake input
         nightlyEffekt = buildEffektFromSource {
@@ -235,12 +250,13 @@
 
         # Automatically generated packages + latest version (as default) + nightly version
         packages = autoPackages // {
-          default = autoPackages.${latestVersion};
-          # nightly = nightlyEffekt;
+          default = latestEffekt;
+          effekt = latestEffekt; # same as default
+          # effekt_nightly = nightlyEffekt;
         };
 
         # Development shells
-        devShells = {
+        devShells = autoDevShells // {
           default = mkDevShell {
             effektVersion = latestVersion;
             backends = builtins.attrValues effektBackends;
@@ -255,10 +271,15 @@
         # Ready-to-run applications
         apps = {
           default = flake-utils.lib.mkApp {
-            drv = autoPackages.${latestVersion};
+            drv = latestEffekt;
             name = "effekt";
           };
-        };
+        } // builtins.mapAttrs (name: pkg:
+          flake-utils.lib.mkApp {
+            drv = pkg;
+            name = "effekt";
+          }
+        ) autoPackages;
 
         checks = {};
       }

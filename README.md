@@ -20,6 +20,9 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
 
   # run the latest version of the Effekt compiler on a file with the LLVM backend
   nix run github:jiribenes/effekt-nix -- --backend llvm file.effekt
+
+  # run a specific version of the Effekt compiler
+  nix run github:jiribenes/effekt-nix#effekt_0_2_2 -- --help
   ```
 
 </details>
@@ -31,15 +34,20 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
 
   Sure, let's get you a devshell in which you can just call `effekt` then:
   ```sh
-  # a development shell with the latest Effekt version
+  # a shell with the latest Effekt version
   nix develop github:jiribenes/effekt-nix
 
-  # a development shell with the nightly Effekt version
+  # a shell with a specific Effekt version
+  nix develop github:jiribenes/effekt-nix#effekt_0_2_2
+
+  # a shell with the nightly Effekt version
   nix develop github:jiribenes/effekt-nix#nightly
 
-  # a development shell for developing the Effekt compiler
+  # ADVANCED: a shell for developing the Effekt compiler
   nix develop github:jiribenes/effekt-nix#compilerDev
   ```
+
+  You can use this -- for example -- for benchmarking or for working with LSP support in VSCode.
 
 </details>
 
