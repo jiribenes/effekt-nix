@@ -12,8 +12,7 @@
     # The main repo of the Effekt language itself, together with its submodules
     effekt-nightly = {
       flake = false;
-      url = "git+https://github.com/effekt-lang/effekt?submodules=1";
-      allRefs = true;
+      url = "git+https://github.com/effekt-lang/effekt?submodules=1&allRefs=1";
     };
   };
 

@@ -3,6 +3,7 @@
     "effekt-nightly": {
       "flake": false,
       "locked": {
+        "allRefs": true,
         "lastModified": 1723399503,
         "narHash": "sha256-C0Gwk7mMhWCEMapVTpNGnKWzOgg1BWxsGxCxDC5hyoE=",
         "ref": "refs/heads/master",
@@ -13,6 +14,7 @@
         "url": "https://github.com/effekt-lang/effekt"
       },
       "original": {
+        "allRefs": true,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/effekt-lang/effekt"
