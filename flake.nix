@@ -62,6 +62,14 @@
           };
         } else {});
 
+        # Meta information about the Effekt programming language
+        effektMeta = {
+          mainProgram = "effekt";
+          description = "A research language with effect handlers and lightweight effect polymorphism";
+          homepage = "https://effekt-lang.org/";
+          license = pkgs.lib.licenses.mit;
+        };
+
         # Creates an Effekt derivation from a prebuilt GitHub release
         buildEffektRelease = { version, sha256, backends ? [effektBackends.js] }:
           assert backends != []; # Ensure at least one backend is specified
@@ -86,6 +94,8 @@
                 --add-flags "-jar $out/lib/effekt.jar" \
                 --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) backends)}
             '';
+
+            meta = effektMeta;
           };
 
         # Creates an Effekt derivation by building Effekt from (some) source
@@ -121,6 +131,8 @@
                 --add-flags "-jar $out/lib/effekt.jar" \
                 --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) backends)}
             '';
+
+            meta = effektMeta;
           };
 
         # Builds an Effekt package
@@ -172,6 +184,9 @@
             ) tests;
 
             doCheck = tests != [];
+
+            # Entry point is the program called ${pname}
+            meta.mainProgram = pname;
           };
 
         # Creates a dev-shell for an Effekt package / version & backends
