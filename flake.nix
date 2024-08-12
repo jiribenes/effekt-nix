@@ -248,7 +248,6 @@
         # Automatically generated packages + latest version (as default) + nightly version
         packages = autoPackages // {
           default = latestEffekt;
-          effekt = latestEffekt; # same as default
           # effekt_nightly = nightlyEffekt;
         };
 
