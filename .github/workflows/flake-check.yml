@@ -1,0 +1,44 @@
+# Taken with permission from https://github.com/tsandrini/flake-parts-builder/blob/9eda2d9a7bc6949568147acaecb60ef9a7ab4552/flake-parts/gh-actions-check/.github/workflows/flake-check.yml
+name: Check Nix flake
+
+on:
+  workflow_dispatch: # allows manual triggering from the Actions UI
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, reopened, synchronize]
+  repository_dispatch:
+    types: [create-pull-request]
+
+jobs:
+  flake-check:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: "Checking out repository..."
+        uses: actions/checkout@v4
+
+      - name: "Installing and configuring the nix package manager..."
+        uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            accept-flake-config = true
+
+      - name: "Setting up magic-nix-cache..."
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: "Setting up packages..."
+        run: |
+          nix profile install nixpkgs#nix-fast-build # parallel nix builder
+
+      - name: "Running `nix flake check`..."
+        run: nix-fast-build --skip-cached --no-nom
+
+      - name: "Running `nix build ...`..."
+        run: nix-fast-build --skip-cached --no-nom --flake ".#packages"
+
+      - name: "Running `nix develop...`..."
+        run: nix-fast-build --skip-cached --no-nom --flake ".#devShells"
+
+      - name: "Checking flake inputs for stale & insecure nixpkgs versions..."
+        uses: DeterminateSystems/flake-checker-action@main
