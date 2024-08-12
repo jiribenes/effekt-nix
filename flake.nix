@@ -55,12 +55,9 @@
             name = "chez-lift";
             buildInputs = [pkgs.chez];
           };
-        } // (if isMLtonSupported then {
-          ml = {
-            name = "ml";
-            buildInputs = [pkgs.mlton];
-          };
-        } else {});
+        } // pkgs.lib.optionalAttrs isMLtonSupported {
+          ml = { name = "ml"; buildInputs = [pkgs.mlton]; };
+        };
 
         # Meta information about the Effekt programming language
         effektMeta = {
@@ -99,7 +96,7 @@
           };
 
         # Creates an Effekt derivation by building Effekt from (some) source
-        buildEffektFromSource = { src, backends ? [effektBackends.js], depsSha256 ? "Yzv6lcIpu8xYv3K7ymoJIcnqJWem1sUWGSQm8253SUw=", version ? "0.99.99+nightly" }:
+        buildEffektFromSource = { src, version, backends ? [effektBackends.js], depsSha256 ? "Yzv6lcIpu8xYv3K7ymoJIcnqJWem1sUWGSQm8253SUw=" }:
           assert backends != []; # Ensure at least one backend is specified
           sbt-derivation.lib.mkSbtDerivation {
             inherit pkgs;
