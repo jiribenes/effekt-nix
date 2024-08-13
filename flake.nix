@@ -124,13 +124,17 @@
 
             inherit depsSha256;
             depsArchivalStrategy = "copy";
-            depsWarmupCommand = ''
-              echo "Warming up: getting compiler bridge thingy"
-              sbt scalaCompilerBridgeBinaryJar
-              echo "Warming up: updating"
-              sbt update
-              echo "Warming up: FINISHED"
-            '';
+
+            # 'depsWarmUpCommand' is just 'sbt compile' by default.
+            # These commands underneath don't really seem to help.
+            #
+            # depsWarmupCommand = ''
+            #   echo "Warming up: getting compiler bridge thingy"
+            #   sbt scalaCompilerBridgeBinaryJar
+            #   echo "Warming up: updating"
+            #   sbt update
+            #   echo "Warming up: FINISHED"
+            # '';
 
             # Change the version in build.sbt
             prePatch = ''
