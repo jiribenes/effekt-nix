@@ -1,7 +1,7 @@
 # effekt-nix
 
 > [!NOTE]
-> Contributions are very welcome! :)
+> Contributions are very welcome, see Contributing section below! :)
 
 A comprehensive Nix flake for the [Effekt programming language](https://github.com/effekt-lang/effekt).
 
@@ -180,3 +180,9 @@ To use a custom Effekt build:
     };
 }
 ```
+
+## Contributing
+
+Contributions of all kind are very welcome, feel free to create a PR.
+
+A common chore is updating this repo with released versions of Effekt in `releases.json` (hopefully will be addressed with CI).
