@@ -91,7 +91,7 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
   
   outputs = { self, nixpkgs, effekt-nix }:
     let
-      system = "x86_64-linux";
+      system = "x86_64-linux"; # or "aarch64-darwin" if you're on a M1
       pkgs = nixpkgs.legacyPackages.${system};
       effekt-lib = effekt-nix.lib.${system};
 
@@ -130,6 +130,9 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 
 The function will compile your project with all specified backends and create a binary for each.
 It also sets up a symbolic link to the default backend's binary under the `pname`.
+
+`effekt-nix` also supports multiple platforms. Use `flake-utils` and its `flake-utils.lib.eachDefaultSystem` (or alternatives)
+to define outputs for multiple systems at the same time.
 
 ### Using a custom Effekt compiler build for your app
 
