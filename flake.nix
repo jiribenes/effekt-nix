@@ -129,8 +129,8 @@
             depsWarmupCommand = ''
               echo "Warming up: getting compiler bridge thingy"
               sbt scalaCompilerBridgeBinaryJar
-              echo "Warming up: assembling a binary"
-              sbt assembleBinary
+              echo "Warming up: updating"
+              sbt update
               echo "Warming up: FINISHED"
             '';
 
