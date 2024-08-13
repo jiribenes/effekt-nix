@@ -5,6 +5,13 @@
 
 A comprehensive Nix flake for the [Effekt programming language](https://github.com/effekt-lang/effekt).
 
+## Features
+
+- pre-packaged Effekt compiler releases for all platforms supported by Nixpkgs, and for any subset of Effekt's backends
+- building the Effekt compiler from source or from a GitHub Release
+- pre-made development shells with Effekt compiler releases and for Effekt compiler development
+- Nix toolchain to build, test, and package apps written in Effekt
+
 ## Quick Start
 
 <details>
@@ -76,46 +83,7 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
 
 </details>
 
-## Examples of using this Nix Flake
-
-### Adding a devshell with Effekt to your own Nix flake
-
-#### Latest released version of Effekt:
-
-```nix
-{
-  inputs.effekt-nix.url = "github:jiribenes/effekt-nix";
-  
-  outputs = { self, nixpkgs, effekt-nix }:
-    let
-      system = "x86_64-linux";
-    in {
-      devShell.${system}.default = effekt-nix.devShells.${system}.default;
-    };
-}
-```
-
-#### Specific released version of Effekt with a subset of backends:
-
-```nix
-{
-  inputs.effekt-nix.url = "github:jiribenes/effekt-nix";
-  
-  outputs = { self, nixpkgs, effekt-nix }:
-    let
-      system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
-      effekt-lib = effekt-nix.lib.${system};
-    in {
-      devShell.${system}.default = effekt-lib.mkDevShell {
-        effektVersion = "0.2.2";
-        backends = with effekt-lib.effektBackends; [ js llvm ];
-      };
-    };
-}
-```
-
-### Building an app written in Effekt in your Nix flake
+## Example: packaging an app written in Effekt
 
 ```nix
 {
@@ -163,7 +131,7 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 The function will compile your project with all specified backends and create a binary for each.
 It also sets up a symbolic link to the default backend's binary under the `pname`.
 
-#### Using a custom Effekt compiler build
+### Using a custom Effekt compiler build for your app
 
 ```nix
 {
@@ -196,19 +164,6 @@ It also sets up a symbolic link to the default backend's binary under the `pname
     };
 }
 ```
-
-### Available Backends
-
-The `effekt-nix` flake supports the following backends:
-
-- `js`: JavaScript backend (always available)
-- `llvm`: LLVM backend
-- `chez-callcc`: Chez Scheme backend with call/cc
-- `chez-monadic`: Chez Scheme backend with monadic style
-- `chez-lift`: Chez Scheme backend with lifting
-- `ml`: MLton backend (only available on systems that support MLton)
-
-You can specify which backends to use when building an Effekt package or creating a development shell.
 
 ## Contributing
 
