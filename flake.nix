@@ -127,7 +127,7 @@
             inherit depsSha256;
             depsArchivalStrategy = "copy";
             depsWarmupCommand = ''
-              sbt compile
+              sbt assembleBinary
             '';
 
             # Change the version in build.sbt
