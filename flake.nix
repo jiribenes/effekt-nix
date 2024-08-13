@@ -9,14 +9,19 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
-    # The main repo of the Effekt language itself, together with its submodules
+    # The main repo of the Effekt language itself, *without* its submodules
     effekt-src-repo = {
+      url = "github:effekt-lang/effekt";
       flake = false;
-      url = "git+https://github.com/effekt-lang/effekt?submodules=1&allRefs=1";
+    };
+    # The Kiama repo as a separate input
+    kiama-src-repo = {
+      url = "github:effekt-lang/kiama";
+      flake = false;
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, sbt-derivation, effekt-src-repo }:
+  outputs = { self, nixpkgs, flake-utils, sbt-derivation, effekt-src-repo, kiama-src-repo }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -294,7 +299,14 @@
 
         # Builds the nightly version of Effekt using the flake input
         nightlyEffekt = buildEffektFromSourceDirect {
-          src = effekt-src-repo;
+          # src = effekt-src-repo;
+          src = pkgs.runCommand "effekt-with-kiama" {} ''
+            cp -r ${effekt-src-repo} $out
+            chmod -R +w $out
+            rm -rf $out/kiama
+            cp -r ${kiama-src-repo} $out/kiama
+          '';
+
           backends = builtins.attrValues effektBackends;
           version = "0.99.99+nightly-${builtins.substring 0 8 effekt-src-repo.rev}";
         };
