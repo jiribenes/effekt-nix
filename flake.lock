@@ -1,6 +1,6 @@
 {
   "nodes": {
-    "effekt-nightly": {
+    "effekt-src-repo": {
       "flake": false,
       "locked": {
         "allRefs": true,
@@ -56,7 +56,7 @@
     },
     "root": {
       "inputs": {
-        "effekt-nightly": "effekt-nightly",
+        "effekt-src-repo": "effekt-src-repo",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
         "sbt-derivation": "sbt-derivation"
