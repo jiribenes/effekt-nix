@@ -155,16 +155,16 @@
             tests ? [],                           # (relative) paths to the tests
             effekt ? null,                        # the explicit Effekt derivation to use: uses latest release if not set
             effektVersion ? latestVersion,        # the Effekt version to use
-            effektBackends ? [effektBackends.js], # Effekt backends to use -- first backend is the "default" one
+            backends ? [effektBackends.js],       # Effekt backends to use -- first backend is the "default" one
             buildInputs ? [],                     # other build inputs required for the package
           }:
-            assert effektBackends != []; # Ensure at least one backend is specified
+            assert backends != []; # Ensure at least one backend is specified
             let
-              defaultBackend = builtins.head effektBackends;
+              defaultBackend = builtins.head backends;
               effektBuild = if effekt != null then effekt else buildEffektRelease {
                 version = effektVersion;
                 sha256 = effektVersions.${effektVersion};
-                backends = effektBackends;
+                inherit backends;
               };
             in
             pkgs.stdenv.mkDerivation {
@@ -178,7 +178,7 @@
                 ${pkgs.lib.concatMapStrings (backend: ''
                   effekt --build --backend ${backend.name} ${main}
                   mv out/$(basename ${main}) out/${pname}-${backend.name}
-                '') effektBackends}
+                '') backends}
               '';
 
               installPhase = ''
@@ -191,7 +191,7 @@
                 pkgs.lib.concatMapStrings (backend: ''
                 echo "Running test ${test} with backend ${backend.name}"
                 effekt --backend ${backend.name} ${test}
-              '') effektBackends
+              '') backends
             ) tests;
 
             doCheck = tests != [];

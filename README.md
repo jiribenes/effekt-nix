@@ -90,12 +90,12 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
     let
       system = "x86_64-linux";
     in {
-      devShell = effekt-nix.devShells.${system}.default;
+      devShell.${system}.default = effekt-nix.devShells.${system}.default;
     };
 }
 ```
 
-#### Specific released version of Effekt:
+#### Specific released version of Effekt with a subset of backends:
 
 ```nix
 {
@@ -107,8 +107,9 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
       pkgs = nixpkgs.legacyPackages.${system};
       effekt-lib = effekt-nix.lib.${system};
     in {
-      devShell = effekt-lib.mkDevShell {
+      devShell.${system}.default = effekt-lib.mkDevShell {
         effektVersion = "0.2.2";
+        backends = with effekt-lib.effektBackends; [ js llvm ];
       };
     };
 }
@@ -125,14 +126,23 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
       effekt-lib = effekt-nix.lib.${system};
+
+      effektVersion = "0.2.2";
+      backends = with effekt-lib.effektBackends; [ js llvm ];
     in {
-      packages.default = effekt-lib.buildEffektPackage {
+      # A package for your Effekt project
+      packages.${system}.default = effekt-lib.buildEffektPackage {
         pname = "my-effekt-project";
         version = "1.0.0";
         src = ./.;              # Path to your Effekt project
         main = ./main.effekt;   # the main Effekt file to run
-        effektVersion = "0.2.2";
-        effektBackends = with effekt-lib.effektBackends; [ js llvm ];
+
+        inherit effektVersion backends;
+      };
+
+      # Development shell for your project
+      devShell.${system}.default = effekt-lib.mkDevShell {
+        inherit effektVersion backends;
       };
     };
 }
@@ -147,7 +157,7 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 - `tests`: (Optional) A list of test files to run during the build process.
 - `effekt`: (Optional) A specific Effekt derivation to use. If not provided, it uses the version specified by `effektVersion`.
 - `effektVersion`: The version of Effekt to use (defaults to the latest version).
-- `effektBackends`: A list of backends to compile your project with. The first backend in the list is considered the default.
+- `backends`: A list of backends to compile your project with. The first backend in the list is considered the default.
 - `buildInputs`: (Optional) Additional build inputs required for your package.
 
 The function will compile your project with all specified backends and create a binary for each.
@@ -172,16 +182,16 @@ It also sets up a symbolic link to the default backend's binary under the `pname
         backends = with effekt-lib.effektBackends; [ js llvm ];
       };
     in {
-      devShell = effekt-lib.mkDevShell {
-        effekt = myCustomEffekt;
-      };
-      
-      packages.myPackage = effekt-lib.buildEffektPackage {
+      packages.${system}.default = effekt-lib.buildEffektPackage {
         pname = "my-custom-effekt-project";
         version = "1.0.0";
         src = ./.; # Path to your Effekt project
         main = ./main.effekt;
-        effekt = myCustomEffekt; #
+        effekt = myCustomEffekt;
+      };
+
+      devShell.${system}.default = effekt-lib.mkDevShell {
+        effekt = myCustomEffekt;
       };
     };
 }
