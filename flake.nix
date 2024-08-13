@@ -9,19 +9,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
-    # The main repo of the Effekt language itself, *without* its submodules
-    effekt-src-repo = {
-      url = "github:effekt-lang/effekt";
-      flake = false;
-    };
-    # The Kiama repo as a separate input
-    kiama-src-repo = {
-      url = "github:effekt-lang/kiama";
-      flake = false;
-    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, sbt-derivation, effekt-src-repo, kiama-src-repo }:
+  outputs = { self, nixpkgs, flake-utils, sbt-derivation }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -111,8 +101,8 @@
         buildEffektFromSource = {
           src,
           version,
+          depsSha256, # SHA256 of the Scala dependencies
           backends ? [effektBackends.js],
-          depsSha256 ? "sha256-aXjkdjcJDaYSOPxWhRd71uhqAXJZsgGeaXwOuw5d3Pg="
         }:
           assert backends != []; # Ensure at least one backend is specified
           sbt-derivation.lib.mkSbtDerivation {
@@ -129,7 +119,7 @@
             depsArchivalStrategy = "copy";
 
             depsWarmupCommand = ''
-              sbt update
+              sbt compile
             '';
 
             # Change the version in build.sbt
@@ -140,50 +130,6 @@
 
             buildPhase = ''
               export MAVEN_OPTS="-Dmaven.repo.local=$out/.m2/repository"
-              sbt assembleBinary
-            '';
-
-            installPhase = ''
-              mkdir -p $out/bin $out/lib
-              mv bin/effekt $out/lib/effekt.jar
-              mv libraries $out/libraries
-
-              makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
-                --add-flags "-jar $out/lib/effekt.jar" \
-                --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) backends)}
-            '';
-
-            meta = effektMeta;
-          };
-
-        buildEffektFromSourceDirect = {
-          src,
-          version,
-          backends ? [effektBackends.js],
-        }:
-          assert backends != []; # Ensure at least one backend is specified
-          pkgs.stdenv.mkDerivation {
-            pname = "effekt";
-            inherit version;
-            inherit src;
-
-            nativeBuildInputs = [pkgs.nodejs pkgs.maven pkgs.makeWrapper pkgs.gnused pkgs.sbt];
-            buildInputs = [pkgs.jre] ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
-
-            # Changes the version in build.sbt
-            prePatch = ''
-              sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' build.sbt
-            '';
-
-            configurePhase = ''
-              export SBT_DEPS=$(mktemp -d)
-              export SBT_OPTS="-Dsbt.global.base=$SBT_DEPS/project/.sbtboot -Dsbt.boot.directory=$SBT_DEPS/project/.boot -Dsbt.ivy.home=$SBT_DEPS/project/.ivy $SBT_OPTS"
-              export COURSIER_CACHE=$SBT_DEPS/project/.coursier
-              mkdir -p $SBT_DEPS/project/{.sbtboot,.boot,.ivy,.coursier}
-              export MAVEN_OPTS="-Dmaven.repo.local=$out/.m2/repository"
-            '';
-
-            buildPhase = ''
               sbt assembleBinary
             '';
 
@@ -303,41 +249,21 @@
 
         # Quick alias for the latest pre-built Effekt derivation
         latestEffekt = autoPackages."effekt_${builtins.replaceStrings ["."] ["_"] latestVersion}";
-
-        # Builds the nightly version of Effekt using the flake input
-        nightlyEffekt = buildEffektFromSource {
-          # src = effekt-src-repo;
-          src = pkgs.runCommand "effekt-with-kiama" {} ''
-            cp -r ${effekt-src-repo} $out
-            chmod -R +w $out
-            rm -rf $out/kiama
-            cp -r ${kiama-src-repo} $out/kiama
-          '';
-
-          backends = builtins.attrValues effektBackends;
-          version = "0.99.99+nightly-${builtins.substring 0 8 effekt-src-repo.rev}";
-        };
-
       in {
         # Helper functions and types for external use
         lib = {
           inherit buildEffektRelease buildEffektFromSource buildEffektPackage mkDevShell effektBackends isMLtonSupported;
         };
 
-        # Automatically generated packages + latest version (as default) + nightly version
+        # Automatically generated packages + latest version (as default)
         packages = autoPackages // {
           default = latestEffekt;
-          effekt_nightly = nightlyEffekt;
         };
 
         # Development shells
         devShells = autoDevShells // {
           default = mkDevShell {
             effektVersion = latestVersion;
-            backends = builtins.attrValues effektBackends;
-          };
-          effekt_nightly = mkDevShell {
-            effekt = nightlyEffekt;
             backends = builtins.attrValues effektBackends;
           };
           compilerDev = compilerDevShell;
