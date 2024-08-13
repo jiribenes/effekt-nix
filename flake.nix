@@ -121,13 +121,11 @@
             inherit version;
             inherit src;
 
-            inherit depsSha256;
-
             nativeBuildInputs = [pkgs.nodejs pkgs.maven pkgs.makeWrapper pkgs.gnused];
             buildInputs = [pkgs.jre] ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
+            inherit depsSha256;
             depsArchivalStrategy = "copy";
-
             depsWarmupCommand = ''
               sbt compile
             '';
@@ -135,7 +133,6 @@
             # Change the version in build.sbt
             prePatch = ''
               sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' build.sbt
-
             '';
 
             buildPhase = ''
