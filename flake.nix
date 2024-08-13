@@ -128,6 +128,7 @@
             depsArchivalStrategy = "copy";
             depsWarmupCommand = ''
               sbt assembleBinary
+              sbt scalaCompilerBridgeBinaryJar
             '';
 
             # Change the version in build.sbt
