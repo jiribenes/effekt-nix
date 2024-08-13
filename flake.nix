@@ -271,7 +271,8 @@
             cp -r ${kiama-src-repo} $out/kiama
           '';
 
-          depsSha256 = pkgs.lib.fakeSha256;
+          # depsSha256 = pkgs.lib.fakeSha256;
+          depsSha256 = "sha256-J8GAVCq1ovoZz35WrPYwkrFWc8GwRV9mmozKVDTfC6k=";
 
           backends = builtins.attrValues effektBackends;
           version = "0.99.99+nightly-${builtins.substring 0 8 effekt-src-repo.rev}";
