@@ -246,25 +246,20 @@
           )
         ) effektVersions;
 
-        # Helper function to create a check for a specific version and backend
-        mkEffektCheck = { version, backend }:
+        # Helper function to create a check for a specific Effekt package and backend
+        mkEffektCheck = { effektPkg, backend }:
           let
-            effektBuild = buildEffektRelease {
-              inherit version;
-              sha256 = effektVersions.${version};
-              backends = [backend];
-            };
             helloWorld = pkgs.writeText "hello.effekt" ''
               def main() = {
                 println("Hello, World!")
               }
             '';
           in
-          pkgs.runCommandLocal "effekt-${version}-${backend.name}-check" {} ''
+          pkgs.runCommandLocal "effekt-${effektPkg.version}-${backend.name}-check" {} ''
             # Check if --help works
-            echo "Checking ${version}-${backend.name}"
+            echo "Checking ${effektPkg.version}-${backend.name}"
             echo "1. Checking if '--help' works for Effekt..."
-            ${effektBuild}/bin/effekt --help
+            ${effektPkg}/bin/effekt --help
             help_exit_code=$?
 
             if [ $help_exit_code -eq 0 ]; then
@@ -276,7 +271,7 @@
 
             # Check if Hello World runs correctly
             echo "2. Running the 'Hello World' program with backend '${backend.name}'..."
-            ${effektBuild}/bin/effekt --backend ${backend.name} ${helloWorld} | tee hello_output.txt
+            ${effektPkg}/bin/effekt --backend ${backend.name} ${helloWorld} | tee hello_output.txt
             hello_exit_code=$?
 
             if [ $hello_exit_code -eq 0 ]; then
@@ -298,7 +293,7 @@
             fi
 
             # If we get here, all checks passed
-            echo "All checks for ${version}-${backend.name} passed successfully."
+            echo "All checks for ${effektPkg.version}-${backend.name} passed successfully."
             touch $out
           '';
 
@@ -337,15 +332,15 @@
           }
         ) autoPackages;
 
-        # Checks for each version and backend combination
+        # Checks for each package and backend combination
         checks = builtins.listToAttrs (
-          builtins.concatMap (version:
+          builtins.concatMap (effektPkg:
             builtins.map (backend:
-              pkgs.lib.nameValuePair "effekt-${version}-${backend.name}" (
-                mkEffektCheck { inherit version backend; }
+              pkgs.lib.nameValuePair "effekt-${effektPkg.version}-${backend.name}" (
+                mkEffektCheck { inherit effektPkg backend; }
               )
             ) (builtins.attrValues effektBackends)
-          ) (builtins.attrNames effektVersions)
+          ) (builtins.attrValues autoPackages)
         );
       }
     );
