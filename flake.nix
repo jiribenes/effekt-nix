@@ -127,8 +127,11 @@
             inherit depsSha256;
             depsArchivalStrategy = "copy";
             depsWarmupCommand = ''
-              sbt assembleBinary
+              echo "Warming up: getting compiler bridge thingy"
               sbt scalaCompilerBridgeBinaryJar
+              echo "Warming up: assembling a binary"
+              sbt assembleBinary
+              echo "Warming up: FINISHED"
             '';
 
             # Change the version in build.sbt
