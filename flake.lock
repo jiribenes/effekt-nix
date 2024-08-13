@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "effekt-src-repo": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1723399503,
+        "narHash": "sha256-IJEo6592ujMurhoG9DkbdqkVEN1Zv6reXHtHTngJBLI=",
+        "owner": "effekt-lang",
+        "repo": "effekt",
+        "rev": "08fc8fdee26d420c05823862ee008092582198dd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "effekt-lang",
+        "repo": "effekt",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems"
@@ -15,6 +31,22 @@
       "original": {
         "owner": "numtide",
         "repo": "flake-utils",
+        "type": "github"
+      }
+    },
+    "kiama-src-repo": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1711460946,
+        "narHash": "sha256-aVvQ+jqki/Q8X3bE4Cb8ghYB18UB7mFnL+P0z0FTa40=",
+        "owner": "effekt-lang",
+        "repo": "kiama",
+        "rev": "ab6aef78fc4ce99a9ad2db8555718d00b03f7b8a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "effekt-lang",
+        "repo": "kiama",
         "type": "github"
       }
     },
@@ -36,7 +68,9 @@
     },
     "root": {
       "inputs": {
+        "effekt-src-repo": "effekt-src-repo",
         "flake-utils": "flake-utils",
+        "kiama-src-repo": "kiama-src-repo",
         "nixpkgs": "nixpkgs",
         "sbt-derivation": "sbt-derivation"
       }
