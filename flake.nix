@@ -112,7 +112,7 @@
           src,
           version,
           backends ? [effektBackends.js],
-          depsSha256 ? "J8GAVCq1ovoZz35WrPYwkrFWc8GwRV9mmozKVDTfC6k="
+          depsSha256 ? "0000000000000000000000000000000000000000000000000000"
         }:
           assert backends != []; # Ensure at least one backend is specified
           sbt-derivation.lib.mkSbtDerivation {
