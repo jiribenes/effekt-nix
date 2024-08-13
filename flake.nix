@@ -16,11 +16,9 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
-        # Effekt versions and their corresponding SHA256 hashes
-        effektVersions = {
-          "0.2.2" = "hYlJg/jpFK3FFze3udXa8lLysVOf7F0HtwALf13TcqM=";
-          # NOTE: Add more versions here as needed
-        };
+        # Load Effekt versions and their corresponding SHA256 hashes from 'releases.json'
+        # If you want to add a new release version, just add it there.
+        effektVersions = builtins.fromJSON (builtins.readFile ./releases.json);
 
         # Gets the newest version from 'effektVersions'
         latestVersion = builtins.head (builtins.sort (a: b: builtins.compareVersions a b > 0) (builtins.attrNames effektVersions));
