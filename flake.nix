@@ -144,6 +144,50 @@
             meta = effektMeta;
           };
 
+        buildEffektFromSourceDirect = {
+          src,
+          version,
+          backends ? [effektBackends.js],
+        }:
+          assert backends != []; # Ensure at least one backend is specified
+          pkgs.stdenv.mkDerivation {
+            pname = "effekt";
+            inherit version;
+            inherit src;
+
+            nativeBuildInputs = [pkgs.nodejs pkgs.maven pkgs.makeWrapper pkgs.gnused pkgs.sbt];
+            buildInputs = [pkgs.jre] ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
+
+            # Changes the version in build.sbt
+            prePatch = ''
+              sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' build.sbt
+            '';
+
+            configurePhase = ''
+              export SBT_DEPS=$(mktemp -d)
+              export SBT_OPTS="-Dsbt.global.base=$SBT_DEPS/project/.sbtboot -Dsbt.boot.directory=$SBT_DEPS/project/.boot -Dsbt.ivy.home=$SBT_DEPS/project/.ivy $SBT_OPTS"
+              export COURSIER_CACHE=$SBT_DEPS/project/.coursier
+              mkdir -p $SBT_DEPS/project/{.sbtboot,.boot,.ivy,.coursier}
+              export MAVEN_OPTS="-Dmaven.repo.local=$out/.m2/repository"
+            '';
+
+            buildPhase = ''
+              sbt assembleBinary
+            '';
+
+            installPhase = ''
+              mkdir -p $out/bin $out/lib
+              mv bin/effekt $out/lib/effekt.jar
+              mv libraries $out/libraries
+
+              makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
+                --add-flags "-jar $out/lib/effekt.jar" \
+                --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) backends)}
+            '';
+
+            meta = effektMeta;
+          };
+
         # Builds an Effekt package
         buildEffektPackage = pkgs.lib.makeOverridable (
           {
@@ -249,7 +293,7 @@
         latestEffekt = autoPackages."effekt_${builtins.replaceStrings ["."] ["_"] latestVersion}";
 
         # Builds the nightly version of Effekt using the flake input
-        nightlyEffekt = buildEffektFromSource {
+        nightlyEffekt = buildEffektFromSourceDirect {
           src = effekt-src-repo;
           backends = builtins.attrValues effektBackends;
           version = "0.99.99+nightly-${builtins.substring 0 8 effekt-src-repo.rev}";
