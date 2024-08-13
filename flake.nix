@@ -246,6 +246,59 @@
           )
         ) effektVersions;
 
+        # Helper function to create a check for a specific Effekt package and backend
+        mkEffektCheck = { effektPkg, backend }:
+          let
+            helloWorld = pkgs.writeText "$out/hello.effekt" ''
+              def main() = {
+                println("Hello, World!")
+              }
+            '';
+          in
+          pkgs.runCommandLocal "effekt-${effektPkg.version}-${backend.name}-check" {} ''
+            mkdir $out
+
+            # Check if --help works
+            echo "Checking ${effektPkg.version}-${backend.name}"
+            echo "1. Checking if '--help' works for Effekt..."
+            ${effektPkg}/bin/effekt --help
+            help_exit_code=$?
+
+            if [ $help_exit_code -eq 0 ]; then
+                echo "[SUCCESS] '--help' command ran successfully."
+            else
+                echo "[ERROR] '--help' command failed with exit code $help_exit_code."
+                exit $help_exit_code
+            fi
+
+            # Check if Hello World runs correctly
+            echo "2. Running the 'Hello World' program with backend '${backend.name}'..."
+            ${effektPkg}/bin/effekt --backend ${backend.name} ${helloWorld} | tee hello_output.txt
+            hello_exit_code=$?
+
+            if [ $hello_exit_code -eq 0 ]; then
+                echo "[SUCCESS] 'Hello World' program executed."
+            else
+                echo "[ERROR] 'Hello World' program failed to execute with exit code $hello_exit_code."
+                exit $hello_exit_code
+            fi
+
+            # Verify the output of the Hello World program
+            echo "3. Checking the output of the 'Hello World' program..."
+            if grep -q "Hello, World!" hello_output.txt; then
+                echo "[SUCCESS] 'Hello World' program produced the expected output."
+            else
+                echo "[ERROR] 'Hello World' program did not produce the expected output."
+                echo "Expected: 'Hello, World!'"
+                echo "Actual: $(cat hello_output.txt)"
+                exit 1
+            fi
+
+            # If we get here, all checks passed
+            echo "All checks for ${effektPkg.version}-${backend.name} passed successfully."
+            touch $out
+          '';
+
         # Quick alias for the latest pre-built Effekt derivation
         latestEffekt = autoPackages."effekt_${builtins.replaceStrings ["."] ["_"] latestVersion}";
       in {
@@ -281,7 +334,16 @@
           }
         ) autoPackages;
 
-        checks = { };
+        # Checks for each package and backend combination
+        checks = builtins.listToAttrs (
+          builtins.concatMap (effektPkg:
+            builtins.map (backend:
+              pkgs.lib.nameValuePair "effekt-${effektPkg.version}-${backend.name}" (
+                mkEffektCheck { inherit effektPkg backend; }
+              )
+            ) (builtins.attrValues effektBackends)
+          ) (builtins.attrValues autoPackages)
+        );
       }
     );
 }
