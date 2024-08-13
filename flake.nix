@@ -249,13 +249,15 @@
         # Helper function to create a check for a specific Effekt package and backend
         mkEffektCheck = { effektPkg, backend }:
           let
-            helloWorld = pkgs.writeText "hello.effekt" ''
+            helloWorld = pkgs.writeText "$out/hello.effekt" ''
               def main() = {
                 println("Hello, World!")
               }
             '';
           in
           pkgs.runCommandLocal "effekt-${effektPkg.version}-${backend.name}-check" {} ''
+            mkdir $out
+
             # Check if --help works
             echo "Checking ${effektPkg.version}-${backend.name}"
             echo "1. Checking if '--help' works for Effekt..."
