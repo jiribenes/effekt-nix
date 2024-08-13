@@ -128,6 +128,10 @@
 
             depsArchivalStrategy = "copy";
 
+            depsWarmupCommand = ''
+              sbt assembleBinary
+            '';
+
             # Change the version in build.sbt
             prePatch = ''
               sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' build.sbt
