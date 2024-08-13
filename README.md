@@ -40,9 +40,6 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
   # a shell with a specific Effekt version
   nix develop github:jiribenes/effekt-nix#effekt_0_2_2
 
-  # a shell with the nightly Effekt version
-  nix develop github:jiribenes/effekt-nix#nightly
-
   # ADVANCED: a shell for developing the Effekt compiler
   nix develop github:jiribenes/effekt-nix#compilerDev
   ```

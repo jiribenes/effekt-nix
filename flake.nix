@@ -9,19 +9,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
-    # The main repo of the Effekt language itself, *without* its submodules
-    effekt-src-repo = {
-      url = "github:effekt-lang/effekt";
-      flake = false;
-    };
-    # The Kiama repo as a separate input
-    kiama-src-repo = {
-      url = "github:effekt-lang/kiama";
-      flake = false;
-    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, sbt-derivation, effekt-src-repo, kiama-src-repo }:
+  outputs = { self, nixpkgs, flake-utils, sbt-derivation }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -260,23 +250,6 @@
 
         # Quick alias for the latest pre-built Effekt derivation
         latestEffekt = autoPackages."effekt_${builtins.replaceStrings ["."] ["_"] latestVersion}";
-
-        # Builds the nightly version of Effekt using the flake input
-        nightlyEffekt = buildEffektFromSource {
-          # src = effekt-src-repo;
-          src = pkgs.runCommand "effekt-with-kiama" {} ''
-            cp -r ${effekt-src-repo} $out
-            chmod -R +w $out
-            rm -rf $out/kiama
-            cp -r ${kiama-src-repo} $out/kiama
-          '';
-
-          # depsSha256 = pkgs.lib.fakeSha256;
-          depsSha256 = "sha256-J8GAVCq1ovoZz35WrPYwkrFWc8GwRV9mmozKVDTfC6k=";
-
-          backends = builtins.attrValues effektBackends;
-          version = "0.99.99+nightly-${builtins.substring 0 8 effekt-src-repo.rev}";
-        };
       in {
         # Helper functions and types for external use
         lib = {
@@ -286,17 +259,12 @@
         # Automatically generated packages + latest version (as default)
         packages = autoPackages // {
           default = latestEffekt;
-          effekt_nightly = nightlyEffekt;
         };
 
         # Development shells
         devShells = autoDevShells // {
           default = mkDevShell {
             effektVersion = latestVersion;
-            backends = builtins.attrValues effektBackends;
-          };
-          effekt_nightly = mkDevShell {
-            effekt = nightlyEffekt;
             backends = builtins.attrValues effektBackends;
           };
           compilerDev = compilerDevShell;
