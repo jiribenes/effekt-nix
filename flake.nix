@@ -112,7 +112,7 @@
           src,
           version,
           backends ? [effektBackends.js],
-          depsSha256 ? "Yzv6lcIpu8xYv3K7ymoJIcnqJWem1sUWGSQm8253SUw="
+          depsSha256 ? "J8GAVCq1ovoZz35WrPYwkrFWc8GwRV9mmozKVDTfC6k="
         }:
           assert backends != []; # Ensure at least one backend is specified
           sbt-derivation.lib.mkSbtDerivation {
@@ -125,6 +125,8 @@
 
             nativeBuildInputs = [pkgs.nodejs pkgs.maven pkgs.makeWrapper pkgs.gnused];
             buildInputs = [pkgs.jre] ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
+
+            depsArchivalStrategy = "copy";
 
             # Change the version in build.sbt
             prePatch = ''
@@ -298,7 +300,7 @@
         latestEffekt = autoPackages."effekt_${builtins.replaceStrings ["."] ["_"] latestVersion}";
 
         # Builds the nightly version of Effekt using the flake input
-        nightlyEffekt = buildEffektFromSourceDirect {
+        nightlyEffekt = buildEffektFromSource {
           # src = effekt-src-repo;
           src = pkgs.runCommand "effekt-with-kiama" {} ''
             cp -r ${effekt-src-repo} $out
