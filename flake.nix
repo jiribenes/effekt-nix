@@ -58,7 +58,7 @@
         # Meta information about the Effekt programming language
         effektMeta = {
           mainProgram = "effekt";
-          description = "A research language with effect handlers and lightweight effect polymorphism";
+          description = "A language with lexical effect handlers and lightweight effect polymorphism";
           homepage = "https://effekt-lang.org/";
           license = pkgs.lib.licenses.mit;
         };
