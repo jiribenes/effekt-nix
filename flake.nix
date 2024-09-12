@@ -117,7 +117,9 @@
             # Change the version in build.sbt
             # XXX: Doesn't work right now
             prePatch = ''
-              sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' build.sbt
+              sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' project/EffektVersion.scala
+              sed -i 's/scalaVersion := "3.3.1"/scalaVersion := "3.3.3"/' build.sbt
+              sed -i 's/scalaVersion := "3.3.1"/scalaVersion := "3.3.3"/' kiama/build.sbt
             '';
 
             buildPhase = ''
