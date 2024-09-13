@@ -114,6 +114,13 @@
 
             inherit depsSha256;
 
+            # XXX: Does this help?
+            overrideDepsAttrs = final: prev: {
+              preBuild = ''
+                export LANG=C.UTF-8
+              '';
+            };
+
             # Change the version in build.sbt
             # XXX: Doesn't work right now
             prePatch = ''
