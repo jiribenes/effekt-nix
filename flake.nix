@@ -118,15 +118,13 @@
             overrideDepsAttrs = final: prev: {
               preBuild = ''
                 export LANG=C.UTF-8
+                export JAVA_OPTS="-Dsbt.ivy.home=$out/ivy2 -Dsbt.boot.directory=$out/sbt-boot -Dsbt.global.base=$out/sbt-global"
               '';
             };
 
             # Change the version in build.sbt
-            # XXX: Doesn't work right now
             prePatch = ''
               sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' project/EffektVersion.scala
-              sed -i 's/scalaVersion := "3.3.1"/scalaVersion := "3.3.3"/' build.sbt
-              sed -i 's/scalaVersion := "3.3.1"/scalaVersion := "3.3.3"/' kiama/build.sbt
             '';
 
             buildPhase = ''
