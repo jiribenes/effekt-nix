@@ -146,7 +146,7 @@
           };
 
         # Builds an Effekt package
-        buildEffektPackage = pkgs.lib.makeOverridable (
+        buildEffektPackage =
           {
             pname,                                # package name
             version,                              # package version
@@ -171,13 +171,19 @@
               inherit pname version src;
 
               nativeBuildInputs = [effektBuild];
-              inherit buildInputs;
+              buildInputs = buildInputs ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
               buildPhase = ''
                 mkdir -p out
                 ${pkgs.lib.concatMapStrings (backend: ''
-                  effekt --build --backend ${backend.name} ${main}
-                  mv out/$(basename ${main}) out/${pname}-${backend.name}
+                  echo "Building with backend ${backend.name} file ${src}/${main}"
+                  echo "Current directory: $(pwd)"
+                  echo "Contents of current directory:"
+                  ls -R
+                  effekt --build --backend ${backend.name} ${src}/${main}
+                  echo "Contents of out directory:"
+                  ls -R out/
+                  mv out/$(basename ${src}/${main} .effekt) out/${pname}-${backend.name}
                 '') backends}
               '';
 
@@ -187,19 +193,22 @@
                 ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
               '';
 
+              fixupPhase = ''
+                patchShebangs $out/bin
+              '';
+
               checkPhase = pkgs.lib.concatMapStrings (test:
                 pkgs.lib.concatMapStrings (backend: ''
-                echo "Running test ${test} with backend ${backend.name}"
-                effekt --backend ${backend.name} ${test}
-              '') backends
-            ) tests;
+                  echo "Running test ${test} with backend ${backend.name}"
+                  effekt --backend ${backend.name} ${src}/${test}
+                '') backends
+              ) tests;
 
-            doCheck = tests != [];
+              doCheck = tests != [];
 
-            # Entry point is the program called ${pname}
-            meta.mainProgram = pname;
-          }
-        );
+              # Entry point is the program called ${pname}
+              meta.mainProgram = pname;
+            };
 
         # Creates a dev-shell for an Effekt package / version & backends
         mkDevShell = {
