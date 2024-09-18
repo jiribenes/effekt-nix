@@ -187,20 +187,33 @@
                 '') backends}
               '';
 
+              # NOTE: Should we already do this in 'buildPhase'?
               installPhase = ''
                 mkdir -p $out/bin
                 cp -r out/* $out/bin/
                 ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
               '';
 
+              # NOTE: Should this be in 'buildPhase' directly?
               fixupPhase = ''
                 patchShebangs $out/bin
               '';
 
+              # NOTE: This currently duplicates the building logic somewhat.
               checkPhase = pkgs.lib.concatMapStrings (test:
                 pkgs.lib.concatMapStrings (backend: ''
-                  echo "Running test ${test} with backend ${backend.name}"
-                  effekt --backend ${backend.name} ${src}/${test}
+                  mkdir -p $TMPDIR/testout
+
+                  echo "Building test ${test} with backend ${backend.name}"
+                  effekt --build --backend ${backend.name} --out $TMPDIR/testout ${src}/${test}
+
+                  echo "Patching the shebangs of the test:"
+                  patchShebangs $TMPDIR/testout
+
+                  echo "Running the test:"
+                  $TMPDIR/testout/$(basename ${test} .effekt)
+
+                  rm -rf $TMPDIR/testout
                 '') backends
               ) tests;
 
