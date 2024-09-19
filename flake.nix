@@ -14,7 +14,7 @@
   outputs = { self, nixpkgs, flake-utils, sbt-derivation }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs { inherit system; };
 
         # Load Effekt versions and their corresponding SHA256 hashes from 'releases.json'
         # If you want to add a new release version, just add it there.
