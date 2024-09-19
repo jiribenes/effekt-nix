@@ -270,10 +270,30 @@
 
         # Quick alias for the latest pre-built Effekt derivation
         latestEffekt = autoPackages."effekt_${builtins.replaceStrings ["."] ["_"] latestVersion}";
+
+        # Helpful function to get an Effekt package given version and backends
+        getEffekt =
+          {
+            version ? null,                 # Version as a string (leave null for the latest version)
+            backends ? [effektBackends.js]  # Supported backends
+          }:
+            assert backends != []; # Ensure at least one backend is specified
+            let
+              selectedVersion = if version == null then latestVersion else version;
+              sha256 = effektVersions.${selectedVersion} or null;
+            in
+              if sha256 == null
+              then throw "Unsupported Effekt version: ${selectedVersion}"
+              else buildEffektRelease {
+                inherit backends;
+                version = selectedVersion;
+                inherit sha256;
+              };
+
       in {
         # Helper functions and types for external use
         lib = {
-          inherit buildEffektRelease buildEffektFromSource buildEffektPackage mkDevShell effektBackends isMLtonSupported;
+          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends isMLtonSupported;
         };
 
         # Automatically generated packages + latest version (as default)
