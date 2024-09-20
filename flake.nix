@@ -14,7 +14,7 @@
   outputs = { self, nixpkgs, flake-utils, sbt-derivation }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = import nixpkgs { inherit system; };
 
         # Load Effekt versions and their corresponding SHA256 hashes from 'releases.json'
         # If you want to add a new release version, just add it there.
@@ -146,7 +146,7 @@
           };
 
         # Builds an Effekt package
-        buildEffektPackage = pkgs.lib.makeOverridable (
+        buildEffektPackage =
           {
             pname,                                # package name
             version,                              # package version
@@ -171,35 +171,57 @@
               inherit pname version src;
 
               nativeBuildInputs = [effektBuild];
-              inherit buildInputs;
+              buildInputs = buildInputs ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
               buildPhase = ''
                 mkdir -p out
                 ${pkgs.lib.concatMapStrings (backend: ''
-                  effekt --build --backend ${backend.name} ${main}
-                  mv out/$(basename ${main}) out/${pname}-${backend.name}
+                  echo "Building with backend ${backend.name} file ${src}/${main}"
+                  echo "Current directory: $(pwd)"
+                  echo "Contents of current directory:"
+                  ls -R
+                  effekt --build --backend ${backend.name} ${src}/${main}
+                  echo "Contents of out directory:"
+                  ls -R out/
+                  mv out/$(basename ${src}/${main} .effekt) out/${pname}-${backend.name}
                 '') backends}
               '';
 
+              # NOTE: Should we already do this in 'buildPhase'?
               installPhase = ''
                 mkdir -p $out/bin
                 cp -r out/* $out/bin/
                 ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
               '';
 
+              # NOTE: Should this be in 'buildPhase' directly?
+              fixupPhase = ''
+                patchShebangs $out/bin
+              '';
+
+              # NOTE: This currently duplicates the building logic somewhat.
               checkPhase = pkgs.lib.concatMapStrings (test:
                 pkgs.lib.concatMapStrings (backend: ''
-                echo "Running test ${test} with backend ${backend.name}"
-                effekt --backend ${backend.name} ${test}
-              '') backends
-            ) tests;
+                  mkdir -p $TMPDIR/testout
 
-            doCheck = tests != [];
+                  echo "Building test ${test} with backend ${backend.name}"
+                  effekt --build --backend ${backend.name} --out $TMPDIR/testout ${src}/${test}
 
-            # Entry point is the program called ${pname}
-            meta.mainProgram = pname;
-          }
-        );
+                  echo "Patching the shebangs of the test:"
+                  patchShebangs $TMPDIR/testout
+
+                  echo "Running the test:"
+                  $TMPDIR/testout/$(basename ${test} .effekt)
+
+                  rm -rf $TMPDIR/testout
+                '') backends
+              ) tests;
+
+              doCheck = tests != [];
+
+              # Entry point is the program called ${pname}
+              meta.mainProgram = pname;
+            };
 
         # Creates a dev-shell for an Effekt package / version & backends
         mkDevShell = {
@@ -271,10 +293,30 @@
           backends = builtins.attrValues effektBackends;
           version = "0.99.99+nightly-${builtins.substring 0 8 effektNightlySrc.rev}";
         };
+
+        # Helpful function to get an Effekt package given version and backends
+        getEffekt =
+          {
+            version ? null,                 # Version as a string (leave null for the latest version)
+            backends ? [effektBackends.js]  # Supported backends
+          }:
+            assert backends != []; # Ensure at least one backend is specified
+            let
+              selectedVersion = if version == null then latestVersion else version;
+              sha256 = effektVersions.${selectedVersion} or null;
+            in
+              if sha256 == null
+              then throw "Unsupported Effekt version: ${selectedVersion}"
+              else buildEffektRelease {
+                inherit backends;
+                version = selectedVersion;
+                inherit sha256;
+              };
+
       in {
         # Helper functions and types for external use
         lib = {
-          inherit buildEffektRelease buildEffektFromSource buildEffektPackage mkDevShell effektBackends isMLtonSupported;
+          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends isMLtonSupported;
         };
 
         # Automatically generated packages + latest version (as default)

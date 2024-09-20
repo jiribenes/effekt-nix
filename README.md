@@ -29,7 +29,7 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
   nix run github:jiribenes/effekt-nix -- --backend llvm file.effekt
 
   # run a specific version of the Effekt compiler
-  nix run github:jiribenes/effekt-nix#effekt_0_2_2 -- --help
+  nix run github:jiribenes/effekt-nix#effekt_0_3_0 -- --help
   ```
 
 </details>
@@ -45,7 +45,7 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
   nix develop github:jiribenes/effekt-nix
 
   # a shell with a specific Effekt version
-  nix develop github:jiribenes/effekt-nix#effekt_0_2_2
+  nix develop github:jiribenes/effekt-nix#effekt_0_3_0
 
   # ADVANCED: a shell for developing the Effekt compiler
   nix develop github:jiribenes/effekt-nix#compilerDev
@@ -95,15 +95,16 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
       pkgs = nixpkgs.legacyPackages.${system};
       effekt-lib = effekt-nix.lib.${system};
 
-      effektVersion = "0.2.2";
+      # You can set a fixed Effekt version and your supported backends here:
+      effektVersion = "0.3.0";
       backends = with effekt-lib.effektBackends; [ js llvm ];
     in {
       # A package for your Effekt project
       packages.${system}.default = effekt-lib.buildEffektPackage {
         pname = "my-effekt-project";
         version = "1.0.0";
-        src = ./.;              # Path to your Effekt project
-        main = ./main.effekt;   # the main Effekt file to run
+        src = ./.;               # Path to your Effekt project
+        main = "./main.effekt";  # the main Effekt file to run
 
         inherit effektVersion backends;
       };
@@ -156,8 +157,10 @@ to define outputs for multiple systems at the same time.
       packages.${system}.default = effekt-lib.buildEffektPackage {
         pname = "my-custom-effekt-project";
         version = "1.0.0";
-        src = ./.; # Path to your Effekt project
-        main = ./main.effekt;
+        src = ./.;                           # Path to your Effekt project
+        main = "./src/main.effekt";          # path to the entrypoint
+        tests = [ "./src/mytest.effekt" ];   # path to the tests
+
         effekt = myCustomEffekt;
       };
 
