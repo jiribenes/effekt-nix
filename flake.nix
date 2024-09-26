@@ -23,9 +23,6 @@
         # Gets the newest version from 'effektVersions'
         latestVersion = builtins.head (builtins.sort (a: b: builtins.compareVersions a b > 0) (builtins.attrNames effektVersions));
 
-        # Checks if MLton is available for the current system
-        isMLtonSupported = builtins.elem system pkgs.mlton.meta.platforms;
-
         # Available backends for Effekt, depending on the current 'system'
         effektBackends = {
           js = {
@@ -43,15 +40,6 @@
           chez-monadic = {
             name = "chez-monadic";
             buildInputs = [pkgs.chez];
-          };
-          chez-lift = {
-            name = "chez-lift";
-            buildInputs = [pkgs.chez];
-          };
-        } // pkgs.lib.optionalAttrs isMLtonSupported {
-          ml = {
-            name = "ml";
-            buildInputs = [pkgs.mlton];
           };
         };
 
@@ -293,7 +281,7 @@
       in {
         # Helper functions and types for external use
         lib = {
-          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends isMLtonSupported;
+          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends;
         };
 
         # Automatically generated packages + latest version (as default)
