@@ -1,0 +1,37 @@
+name: Update Effekt Releases
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # Every day at 5am UTC
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  update-releases:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+      
+      - name: Run update script
+        id: update
+        run: bash .github/scripts/update-releases.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Create Pull Request
+        if: steps.update.outputs.updated == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          add-paths: |
+            releases.json
+          commit-message: "Add Effekt v${{ steps.update.outputs.version }}"
+          title: "Add Effekt v${{ steps.update.outputs.version }}"
+          body: "Automatically generated PR to add Effekt version ${{ steps.update.outputs.version }} to releases.json"
+          branch: "update/effekt-v${{ steps.update.outputs.version }}"
+          delete-branch: true
