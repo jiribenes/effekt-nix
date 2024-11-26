@@ -29,7 +29,7 @@
             name = "js";
             buildInputs = [pkgs.nodejs];
           };
-          js-web {
+          js-web = {
             name = "js-web";
             buildInputs = [];
           };
