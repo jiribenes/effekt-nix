@@ -29,6 +29,10 @@
             name = "js";
             buildInputs = [pkgs.nodejs];
           };
+          js-web {
+            name = "js-web";
+            buildInputs = [];
+          };
           llvm = {
             name = "llvm";
             buildInputs = [pkgs.llvm pkgs.libuv pkgs.clang]; # GCC is also usable here
@@ -176,6 +180,7 @@
               '';
 
               # NOTE: Should we already do this in 'buildPhase'?
+              # TODO: `js-web`?
               installPhase = ''
                 mkdir -p $out/bin
                 cp -r out/* $out/bin/
@@ -202,7 +207,7 @@
                   $TMPDIR/testout/$(basename ${test} .effekt)
 
                   rm -rf $TMPDIR/testout
-                '') backends
+                '') backends # TODO: filter out `js-web`
               ) tests;
 
               doCheck = tests != [];
