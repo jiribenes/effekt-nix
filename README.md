@@ -83,6 +83,15 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
 
 </details>
 
+---
+
+<details>
+  <summary><b>I want to create a new Effekt project!</b></summary>
+
+You can use this Nix flake directly, but there's also a full template with CI available in [`jiribenes/effekt-template`](https://github.com/jiribenes/effekt-template).
+
+</details>
+
 ## Example: packaging an app written in Effekt
 
 ```nix
@@ -174,12 +183,3 @@ to define outputs for multiple systems at the same time.
 ## Contributing
 
 Contributions of all kinds are very welcome, feel free to create a PR.
-
-A common chore is updating this repo with released versions of Effekt in `releases.json` (hopefully will be addressed with CI).
-
-### Adding a new Effekt version
-
-To add support for a new Effekt version:
-
-1. Update the `releases.json` file with the new version number and its corresponding SHA256 hash.
-2. The flake will automatically generate new packages and development shells for the added version.
