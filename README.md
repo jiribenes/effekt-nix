@@ -182,4 +182,7 @@ to define outputs for multiple systems at the same time.
 
 ## Contributing
 
-Contributions of all kinds are very welcome, feel free to create a PR.
+Contributions of all kinds are very welcome, feel free to just create a PR.
+
+We would especially welcome contributions fixing the various [issues](https://github.com/jiribenes/effekt-nix/issues) this project has
+and/or with the [WIP PRs](https://github.com/jiribenes/effekt-nix/pulls) that aren't done yet.
