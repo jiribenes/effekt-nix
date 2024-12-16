@@ -193,7 +193,7 @@
               installPhase = ''
                 mkdir -p $out/bin
                 cp -r out/* $out/bin/
-                if [ "${backend.name}" != "js-web" ]; then
+                if [ "${defaultBackend.name}" != "js-web" ]; then
                   ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
                 fi
               '';
