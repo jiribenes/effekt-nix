@@ -175,6 +175,9 @@
                   ls -R
                   effekt --build --backend ${backend.name} ${src}/${main}
 
+                  echo "Contents of out directory:"
+                  ls -R out/
+
                   if [ "${backend.name}" = "js-web" ]; then
                     echo "Moving .js and .html for js-web backend"
                     mv "$(basename ${src}/${main} .effekt).js" $out/${pname}.js
