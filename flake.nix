@@ -167,15 +167,21 @@
 
               buildPhase = ''
                 mkdir -p out
+
                 ${pkgs.lib.concatMapStrings (backend: ''
                   echo "Building with backend ${backend.name} file ${src}/${main}"
                   echo "Current directory: $(pwd)"
                   echo "Contents of current directory:"
                   ls -R
                   effekt --build --backend ${backend.name} ${src}/${main}
-                  echo "Contents of out directory:"
-                  ls -R out/
-                  mv out/$(basename ${src}/${main} .effekt) out/${pname}-${backend.name}
+
+                  if [ "${backend.name}" = "js-web" ]; then
+                    echo "Moving .js and .html for js-web backend"
+                    mv "$(basename ${src}/${main} .effekt).js" $out/${pname}.js
+                    mv "$(basename ${src}/${main} .effekt).html" $out/${pname}.html
+                  else
+                    mv out/$(basename ${src}/${main} .effekt) out/${pname}-${backend.name}
+                  fi
                 '') backends}
               '';
 
