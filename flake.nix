@@ -162,7 +162,7 @@
             pkgs.stdenv.mkDerivation {
               inherit pname version src;
 
-              nativeBuildInputs = [effektBuild, pkgs.gnused];
+              nativeBuildInputs = [effektBuild pkgs.gnused];
               buildInputs = buildInputs ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
               buildPhase = ''
