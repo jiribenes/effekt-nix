@@ -165,6 +165,7 @@
               nativeBuildInputs = [effektBuild pkgs.gnused];
               buildInputs = buildInputs ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
+              # TODO: consider removing the 'js-web'-related hacks...
               buildPhase = ''
                 mkdir -p out
 
@@ -190,7 +191,6 @@
               '';
 
               # NOTE: Should we already do this in 'buildPhase'?
-              # TODO: `js-web`?
               installPhase = ''
                 mkdir -p $out/bin
                 cp -r out/* $out/bin/
