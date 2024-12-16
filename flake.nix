@@ -162,7 +162,7 @@
             pkgs.stdenv.mkDerivation {
               inherit pname version src;
 
-              nativeBuildInputs = [effektBuild];
+              nativeBuildInputs = [effektBuild, pkgs.gnused];
               buildInputs = buildInputs ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
               buildPhase = ''
@@ -182,6 +182,7 @@
                     echo "Moving .js and .html for js-web backend"
                     mv "out/$(basename ${src}/${main} .effekt).js" out/${pname}.js
                     mv "out/$(basename ${src}/${main} .effekt).html" out/${pname}.html
+                    sed -i 's/src="main.js"/src="${pname}.js"/' out/${pname}.html
                   else
                     mv out/$(basename ${src}/${main} .effekt) out/${pname}-${backend.name}
                   fi
