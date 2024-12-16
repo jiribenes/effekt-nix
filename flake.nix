@@ -29,6 +29,10 @@
             name = "js";
             buildInputs = [pkgs.nodejs];
           };
+          js-web = {
+            name = "js-web";
+            buildInputs = [pkgs.nodejs]; # TODO: For tests, we currently use 'js'
+          };
           llvm = {
             name = "llvm";
             buildInputs = [pkgs.llvm pkgs.libuv pkgs.clang]; # GCC is also usable here
@@ -158,20 +162,31 @@
             pkgs.stdenv.mkDerivation {
               inherit pname version src;
 
-              nativeBuildInputs = [effektBuild];
+              nativeBuildInputs = [effektBuild pkgs.gnused];
               buildInputs = buildInputs ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
+              # TODO: consider removing the 'js-web'-related hacks...
               buildPhase = ''
                 mkdir -p out
+
                 ${pkgs.lib.concatMapStrings (backend: ''
                   echo "Building with backend ${backend.name} file ${src}/${main}"
                   echo "Current directory: $(pwd)"
                   echo "Contents of current directory:"
                   ls -R
                   effekt --build --backend ${backend.name} ${src}/${main}
+
                   echo "Contents of out directory:"
                   ls -R out/
-                  mv out/$(basename ${src}/${main} .effekt) out/${pname}-${backend.name}
+
+                  if [ "${backend.name}" = "js-web" ]; then
+                    echo "Moving .js and .html for js-web backend"
+                    mv "out/$(basename ${src}/${main} .effekt).js" out/${pname}.js
+                    mv "out/$(basename ${src}/${main} .effekt).html" out/${pname}.html
+                    sed -i 's/src="main.js"/src="${pname}.js"/' out/${pname}.html
+                  else
+                    mv out/$(basename ${src}/${main} .effekt) out/${pname}-${backend.name}
+                  fi
                 '') backends}
               '';
 
@@ -179,7 +194,9 @@
               installPhase = ''
                 mkdir -p $out/bin
                 cp -r out/* $out/bin/
-                ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
+                if [ "${defaultBackend.name}" != "js-web" ]; then
+                  ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
+                fi
               '';
 
               # NOTE: Should this be in 'buildPhase' directly?
@@ -189,20 +206,24 @@
 
               # NOTE: This currently duplicates the building logic somewhat.
               checkPhase = pkgs.lib.concatMapStrings (test:
-                pkgs.lib.concatMapStrings (backend: ''
-                  mkdir -p $TMPDIR/testout
+                pkgs.lib.concatMapStrings (backend:
+                  let
+                    backendForCheck = if backend == effektBackends.js-web then effektBackends.js else backend;
+                  in ''
+                    mkdir -p $TMPDIR/testout
 
-                  echo "Building test ${test} with backend ${backend.name}"
-                  effekt --build --backend ${backend.name} --out $TMPDIR/testout ${src}/${test}
+                    echo "Building test ${test} with backend ${backendForCheck.name}"
+                    effekt --build --backend ${backendForCheck.name} --out $TMPDIR/testout ${src}/${test}
 
-                  echo "Patching the shebangs of the test:"
-                  patchShebangs $TMPDIR/testout
+                    echo "Patching the shebangs of the test:"
+                    patchShebangs $TMPDIR/testout
 
-                  echo "Running the test:"
-                  $TMPDIR/testout/$(basename ${test} .effekt)
+                    echo "Running the test:"
+                    $TMPDIR/testout/$(basename ${test} .effekt)
 
-                  rm -rf $TMPDIR/testout
-                '') backends
+                    rm -rf $TMPDIR/testout
+                  ''
+                ) backends
               ) tests;
 
               doCheck = tests != [];
