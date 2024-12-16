@@ -31,7 +31,7 @@
           };
           js-web = {
             name = "js-web";
-            buildInputs = [];
+            buildInputs = [pkgs.nodejs]; # TODO: For tests, we currently use 'js'
           };
           llvm = {
             name = "llvm";
