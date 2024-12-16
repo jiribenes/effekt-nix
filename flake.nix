@@ -180,11 +180,8 @@
 
                   if [ "${backend.name}" = "js-web" ]; then
                     echo "Moving .js and .html for js-web backend"
-                    echo "out/$(basename ${src}/${main} .effekt).js"
-                    echo "out/$(basename ${src}/${main} .effekt).html"
-                    ls -R out/
-                    mv "out/$(basename ${src}/${main} .effekt).js" $out/${pname}.js
-                    mv "out/$(basename ${src}/${main} .effekt).html" $out/${pname}.html
+                    mv "out/$(basename ${src}/${main} .effekt).js" out/${pname}.js
+                    mv "out/$(basename ${src}/${main} .effekt).html" out/${pname}.html
                   else
                     mv out/$(basename ${src}/${main} .effekt) out/${pname}-${backend.name}
                   fi
@@ -196,7 +193,9 @@
               installPhase = ''
                 mkdir -p $out/bin
                 cp -r out/* $out/bin/
-                ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
+                if [ "${backend.name}" != "js-web" ]; then
+                  ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
+                fi
               '';
 
               # NOTE: Should this be in 'buildPhase' directly?
