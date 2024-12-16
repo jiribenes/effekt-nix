@@ -194,20 +194,24 @@
 
               # NOTE: This currently duplicates the building logic somewhat.
               checkPhase = pkgs.lib.concatMapStrings (test:
-                pkgs.lib.concatMapStrings (backend: ''
-                  mkdir -p $TMPDIR/testout
+                pkgs.lib.concatMapStrings (backend:
+                  let
+                    backendForCheck = if backend == effektBackends.js-web then effektBackends.js else backend;
+                  in ''
+                    mkdir -p $TMPDIR/testout
 
-                  echo "Building test ${test} with backend ${backend.name}"
-                  effekt --build --backend ${backend.name} --out $TMPDIR/testout ${src}/${test}
+                    echo "Building test ${test} with backend ${backendForCheck.name}"
+                    effekt --build --backend ${backendForCheck.name} --out $TMPDIR/testout ${src}/${test}
 
-                  echo "Patching the shebangs of the test:"
-                  patchShebangs $TMPDIR/testout
+                    echo "Patching the shebangs of the test:"
+                    patchShebangs $TMPDIR/testout
 
-                  echo "Running the test:"
-                  $TMPDIR/testout/$(basename ${test} .effekt)
+                    echo "Running the test:"
+                    $TMPDIR/testout/$(basename ${test} .effekt)
 
-                  rm -rf $TMPDIR/testout
-                '') backends # TODO: filter out `js-web`
+                    rm -rf $TMPDIR/testout
+                  ''
+                ) backends
               ) tests;
 
               doCheck = tests != [];
