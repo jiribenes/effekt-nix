@@ -23,27 +23,70 @@
         # Gets the newest version from 'effektVersions'
         latestVersion = builtins.head (builtins.sort (a: b: builtins.compareVersions a b > 0) (builtins.attrNames effektVersions));
 
-        # Available backends for Effekt, depending on the current 'system'
+        # Backend-specific processing functions
+        backendUtils = {
+          # Standard binary output processing
+          standardBinary = pname: backend: mainFile: ''
+            mv out/$(basename ${mainFile} .effekt) out/${pname}-${backend.outputName}
+          '';
+
+          # Web output processing
+          webOutput = pname: backend: mainFile: ''
+            mv "out/$(basename ${mainFile} .effekt).js" out/${pname}.js
+            mv "out/$(basename ${mainFile} .effekt).html" out/${pname}.html
+            sed -i 's/src="main.js"/src="${pname}.js"/' out/${pname}.html
+          '';
+        };
+
+        # Available backends for Effekt
         effektBackends = {
           js = {
             name = "js";
-            buildInputs = [pkgs.nodejs];
+            outputName = "js";
+            buildInputs = [pkgs.nodejs];    # Needed for the compiler
+            runtimeInputs = [pkgs.nodejs];  # Needed to run the programs
+            processOutput = backendUtils.standardBinary;
+            runtime = "node";
           };
           js-web = {
             name = "js-web";
-            buildInputs = [pkgs.nodejs]; # TODO: For tests, we currently use 'js'
+            outputName = "js-web";
+            buildInputs = [pkgs.nodejs];    # For tests, we currently use the 'js' backend
+            runtimeInputs = [];             # Web output doesn't need runtime deps
+            processOutput = backendUtils.webOutput;
+            runtime = null;
+          };
+          js-bun = {
+            name = "js";
+            outputName = "js-bun";
+            buildInputs = [pkgs.nodejs];    # Still need nodejs for compilation
+            runtimeInputs = [pkgs.bun];     # But use bun for running
+            processOutput = backendUtils.standardBinary;
+            runtime = "bun";
           };
           llvm = {
             name = "llvm";
-            buildInputs = [pkgs.llvm pkgs.libuv pkgs.clang]; # GCC is also usable here
+            outputName = "llvm";
+            buildInputs = [pkgs.llvm pkgs.clang];  # Needed for compilation
+            runtimeInputs = [pkgs.libuv];          # Only libuv needed at runtime
+            processOutput = backendUtils.standardBinary;
+            runtime = null;
           };
           chez-callcc = {
             name = "chez-callcc";
+            outputName = "chez-callcc";
             buildInputs = [pkgs.chez];
+            runtimeInputs = [pkgs.chez];
+            processOutput = backendUtils.standardBinary;
+            runtime = "scheme";
           };
           chez-monadic = {
             name = "chez-monadic";
+            outputName = "chez-monadic";
             buildInputs = [pkgs.chez];
+            runtimeInputs = [pkgs.chez];
+            processOutput = backendUtils.standardBinary;
+            runtime = "scheme";
           };
         };
 
@@ -140,15 +183,15 @@
         # Builds an Effekt package
         buildEffektPackage =
           {
-            pname,                                # package name
-            version,                              # package version
-            src,                                  # source of the package
-            main,                                 # (relative) path to the entrypoint
-            tests ? [],                           # (relative) paths to the tests
-            effekt ? null,                        # the explicit Effekt derivation to use: uses latest release if not set
-            effektVersion ? latestVersion,        # the Effekt version to use
-            backends ? [effektBackends.js],       # Effekt backends to use -- first backend is the "default" one
-            buildInputs ? [],                     # other build inputs required for the package
+            pname,
+            version,
+            src,
+            main,
+            tests ? [],
+            effekt ? null,
+            effektVersion ? latestVersion,
+            backends ? [effektBackends.js],
+            buildInputs ? [],
           }:
             assert backends != []; # Ensure at least one backend is specified
             let
@@ -162,49 +205,56 @@
             pkgs.stdenv.mkDerivation {
               inherit pname version src;
 
-              nativeBuildInputs = [effektBuild pkgs.gnused];
-              buildInputs = buildInputs ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
+              # Build-time only dependencies
+              nativeBuildInputs = [
+                effektBuild
+                pkgs.gnused
+                pkgs.makeWrapper
+              ] ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
-              # TODO: consider removing the 'js-web'-related hacks...
+              # Runtime dependencies for the build environment (needed for tests)
+              buildInputs = buildInputs
+                ++ pkgs.lib.concatMap (b: b.runtimeInputs) backends;
+
               buildPhase = ''
                 mkdir -p out
 
                 ${pkgs.lib.concatMapStrings (backend: ''
                   echo "Building with backend ${backend.name} file ${src}/${main}"
-                  echo "Current directory: $(pwd)"
-                  echo "Contents of current directory:"
-                  ls -R
                   effekt --build --backend ${backend.name} ${src}/${main}
 
-                  echo "Contents of out directory:"
-                  ls -R out/
+                  ${backend.processOutput pname backend "${src}/${main}"}
 
-                  if [ "${backend.name}" = "js-web" ]; then
-                    echo "Moving .js and .html for js-web backend"
-                    mv "out/$(basename ${src}/${main} .effekt).js" out/${pname}.js
-                    mv "out/$(basename ${src}/${main} .effekt).html" out/${pname}.html
-                    sed -i 's/src="main.js"/src="${pname}.js"/' out/${pname}.html
-                  else
-                    mv out/$(basename ${src}/${main} .effekt) out/${pname}-${backend.name}
-                  fi
+                  ${if backend.runtime != null then ''
+                    echo "Setting runtime to ${backend.runtime}"
+                    sed -i '1c#!/usr/bin/env ${backend.runtime}' out/${pname}-${backend.outputName}
+                  '' else ""}
                 '') backends}
               '';
 
-              # NOTE: Should we already do this in 'buildPhase'?
               installPhase = ''
                 mkdir -p $out/bin
                 cp -r out/* $out/bin/
-                if [ "${defaultBackend.name}" != "js-web" ]; then
-                  ln -s $out/bin/${pname}-${defaultBackend.name} $out/bin/${pname}
-                fi
+
+                # Wrap each backend's output with its runtime dependencies
+                ${pkgs.lib.concatMapStrings (backend:
+                  if backend.runtime != null || (backend.runtimeInputs != []) then ''
+                    echo "Wrapping ${pname}-${backend.outputName} with runtime dependencies"
+                    mv $out/bin/${pname}-${backend.outputName} $out/bin/${pname}-${backend.outputName}.unwrapped
+                    makeWrapper $out/bin/${pname}-${backend.outputName}.unwrapped $out/bin/${pname}-${backend.outputName} \
+                      --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs}
+                  '' else ""
+                ) backends}
+
+                # Create default symlink if not web backend
+                ${if defaultBackend.runtime != null then ''
+                  ln -s $out/bin/${pname}-${defaultBackend.outputName} $out/bin/${pname}
+                '' else ""}
               '';
 
-              # NOTE: Should this be in 'buildPhase' directly?
-              fixupPhase = ''
-                patchShebangs $out/bin
-              '';
+              # Note: fixupPhase with patchShebangs should run after our wrapping
 
-              # NOTE: This currently duplicates the building logic somewhat.
+              doCheck = tests != [];
               checkPhase = pkgs.lib.concatMapStrings (test:
                 pkgs.lib.concatMapStrings (backend:
                   let
@@ -215,8 +265,14 @@
                     echo "Building test ${test} with backend ${backendForCheck.name}"
                     effekt --build --backend ${backendForCheck.name} --out $TMPDIR/testout ${src}/${test}
 
-                    echo "Patching the shebangs of the test:"
-                    patchShebangs $TMPDIR/testout
+                    echo "Patching and wrapping the test"
+                    ${if backendForCheck.runtime != null then ''
+                      sed -i '1c#!/usr/bin/env ${backendForCheck.runtime}' $TMPDIR/testout/$(basename ${test} .effekt)
+                    '' else ""}
+
+                    mv $TMPDIR/testout/$(basename ${test} .effekt) $TMPDIR/testout/$(basename ${test} .effekt).unwrapped
+                    makeWrapper $TMPDIR/testout/$(basename ${test} .effekt).unwrapped $TMPDIR/testout/$(basename ${test} .effekt) \
+                      --prefix PATH : ${pkgs.lib.makeBinPath backendForCheck.runtimeInputs}
 
                     echo "Running the test:"
                     $TMPDIR/testout/$(basename ${test} .effekt)
@@ -225,8 +281,6 @@
                   ''
                 ) backends
               ) tests;
-
-              doCheck = tests != [];
 
               # Entry point is the program called ${pname}
               meta.mainProgram = pname;
@@ -246,7 +300,9 @@
             };
           in
           pkgs.mkShell {
-            buildInputs = [effektBuild] ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
+            buildInputs = [effektBuild]
+              ++ pkgs.lib.concatMap (b: b.buildInputs) backends
+              ++ pkgs.lib.concatMap (b: b.runtimeInputs) backends;
           };
 
         # Development shell for Effekt compiler development
