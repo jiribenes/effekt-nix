@@ -183,15 +183,15 @@
         # Builds an Effekt package
         buildEffektPackage =
           {
-            pname,
-            version,
-            src,
-            main,
-            tests ? [],
-            effekt ? null,
-            effektVersion ? latestVersion,
-            backends ? [effektBackends.js],
-            buildInputs ? [],
+            pname,                                # package name
+            version,                              # package version
+            src,                                  # source of the package
+            main,                                 # (relative) path to the entrypoint
+            tests ? [],                           # (relative) paths to the tests
+            effekt ? null,                        # the explicit Effekt derivation to use: uses latest release if not set
+            effektVersion ? latestVersion,        # the Effekt version to use
+            backends ? [effektBackends.js],       # Effekt backends to use -- first backend is the "default" one
+            buildInputs ? [],                     # other build inputs required for the package
           }:
             assert backends != []; # Ensure at least one backend is specified
             let
