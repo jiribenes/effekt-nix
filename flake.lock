@@ -38,7 +38,8 @@
       "inputs": {
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
-        "sbt-derivation": "sbt-derivation"
+        "sbt-derivation": "sbt-derivation",
+        "tree-sitter-effekt-src": "tree-sitter-effekt-src"
       }
     },
     "sbt-derivation": {
@@ -76,6 +77,22 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "tree-sitter-effekt-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1726144812,
+        "narHash": "sha256-u2q3qhsEQ3+DfWsByqas6xVeTvNJ3ESpYSPHuwf82ks=",
+        "owner": "leonfuss",
+        "repo": "tree-sitter-effekt",
+        "rev": "edc8e8bdbf7b2a5a1e9e2514e2d9018cd2dbac80",
+        "type": "github"
+      },
+      "original": {
+        "owner": "leonfuss",
+        "repo": "tree-sitter-effekt",
         "type": "github"
       }
     }
