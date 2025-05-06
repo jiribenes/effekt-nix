@@ -9,9 +9,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.flake-utils.follows = "flake-utils";
     };
+    tree-sitter-effekt-src = {
+      url = "github:leonfuss/tree-sitter-effekt";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, sbt-derivation }:
+  outputs = { self, nixpkgs, flake-utils, sbt-derivation, tree-sitter-effekt-src }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
@@ -307,6 +311,9 @@
 
         # Automatically generated packages + latest version (as default)
         packages = autoPackages // {
+          tree-sitter-effekt = pkgs.callPackage ./pkgs/tree-sitter-effekt {
+            src = tree-sitter-effekt-src;
+          };
           default = latestEffekt;
         };
 
