@@ -136,9 +136,10 @@
           version,
           depsSha256, # SHA256 of the Scala dependencies
           backends ? [effektBackends.js],
+          overrides ? {},
         }:
           assert backends != []; # Ensure at least one backend is specified
-          sbt-derivation.lib.mkSbtDerivation {
+          sbt-derivation.lib.mkSbtDerivation ({
             inherit pkgs;
             pname = "effekt";
             inherit version;
@@ -178,7 +179,7 @@
             '';
 
             meta = effektMeta;
-          };
+          } // { inherit overrides; });
 
         # Builds an Effekt package
         buildEffektPackage =
