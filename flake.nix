@@ -173,7 +173,7 @@
               mv libraries $out/libraries
 
               makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
-                --add-flags "-jar $out/lib/effekt.jar" \
+                --add-flags "-jar $out/lib/effekt.jar --lib $out/libraries/common" \
                 --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) backends)}
             '';
 
