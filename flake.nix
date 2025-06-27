@@ -128,11 +128,9 @@
               mv libraries $out/libraries
 
               makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
-                --add-flags "-jar $out/lib/effekt.jar --clang-includes ${
-                  pkgs.lib.makeLibraryPath [ pkgs.libuv ]
-                }/libuv.so --clang-libraries ${
-                  pkgs.lib.makeLibraryPath [ pkgs.libuv ]
-                }/libuv.so"\
+                --add-flags "-jar $out/lib/effekt.jar\
+                --clang-libraries ${pkgs.libuv}/lib \
+                --clang-includes ${pkgs.libuv}/include" \
                 --prefix PATH : ${
                   pkgs.lib.makeBinPath
                   (pkgs.lib.concatMap (b: b.buildInputs) backends)
