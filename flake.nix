@@ -106,9 +106,7 @@
         # Creates an Effekt derivation from a prebuilt GitHub release
         buildEffektRelease =
           { version, sha256, backends ? [ effektBackends.js ] }:
-          let uvPath = pkgs.lib.makeLibraryPath [ pkgs.libuv ];
-
-          in assert backends != [ ]; # Ensure at least one backend is specified
+          assert backends != [ ]; # Ensure at least one backend is specified
           pkgs.stdenv.mkDerivation {
             pname = "effekt";
             inherit version;
@@ -130,7 +128,11 @@
               mv libraries $out/libraries
 
               makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
-                --add-flags "-jar $out/lib/effekt.jar --clang-includes ${uvPath} --clang-libraries ${uvPath}"\
+                --add-flags "-jar $out/lib/effekt.jar --clang-includes ${
+                  pkgs.lib.makeLibraryPath [ pkgs.libuv ]
+                }/libuv.so --clang-libraries ${
+                  pkgs.lib.makeLibraryPath [ pkgs.libuv ]
+                }/libuv.so"\
                 --prefix PATH : ${
                   pkgs.lib.makeBinPath
                   (pkgs.lib.concatMap (b: b.buildInputs) backends)
