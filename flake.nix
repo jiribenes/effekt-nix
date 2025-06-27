@@ -129,8 +129,8 @@
 
               makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
                 --add-flags "-jar $out/lib/effekt.jar\
-                --clang-libraries ${pkgs.libuv}/lib \
-                --clang-includes ${pkgs.libuv}/include" \
+                --clang-libraries ${pkgs.lib.makeLibraryPath [ pkgs.libuv ]} \
+                --clang-includes ${pkgs.lib.makeIncludePath [ pkgs.libuv ]}" \
                 --prefix PATH : ${
                   pkgs.lib.makeBinPath
                   (pkgs.lib.concatMap (b: b.buildInputs) backends)
