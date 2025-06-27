@@ -120,6 +120,7 @@
             nativeBuildInputs = [ pkgs.makeWrapper ];
             buildInputs = [ pkgs.jre ]
               ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
+            propagatedBuildInputs = [ pkgs.libuv ];
 
             installPhase = ''
               mkdir -p $out/bin $out/lib
