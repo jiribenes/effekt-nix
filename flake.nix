@@ -103,9 +103,26 @@
           license = pkgs.lib.licenses.mit;
         };
 
+        # wrapper function
+        wrapEffekt = { backends }:
+          let
+            runInputs = pkgs.lib.concatMap (b: b.runtimeInputs) backends;
+            uvInclude = pkgs.lib.makeIncludePath [ pkgs.libuv ];
+            uvLib = pkgs.lib.makeLibraryPath [ pkgs.libuv ];
+            backendBins = pkgs.lib.makeBinPath
+              (pkgs.lib.concatMap (b: b.buildInputs) backends);
+            clangArgs = if (builtins.elem pkgs.libuv runInputs) then ''
+              --clang-libraries ${uvLib} \
+                       --clang-includes ${uvInclude}'' else
+              "";
+          in assert backends != [ ]; ''
+            makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
+                           --add-flags "-jar $out/lib/effekt.jar \
+                           ${clangArgs}" \
+                           --prefix PATH : ${backendBins}'';
+
         # Creates an Effekt derivation from a prebuilt GitHub release
-        buildEffektRelease =
-          { version, sha256, backends ? [ effektBackends.js ] }:
+        buildEffektRelease = { version, sha256, backends }:
           assert backends != [ ]; # Ensure at least one backend is specified
           pkgs.stdenv.mkDerivation {
             pname = "effekt";
@@ -118,23 +135,15 @@
             };
 
             nativeBuildInputs = [ pkgs.makeWrapper ];
-            buildInputs = [ pkgs.jre ]
-              ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
+            buildInputs = [ pkgs.jre ];
+            #++ pkgs.lib.concatMap (b: b.buildInputs) backends;
             propagatedBuildInputs = [ pkgs.libuv ];
 
             installPhase = ''
               mkdir -p $out/bin $out/lib
               mv bin/effekt $out/lib/effekt.jar
               mv libraries $out/libraries
-
-              makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
-                --add-flags "-jar $out/lib/effekt.jar\
-                --clang-libraries ${pkgs.lib.makeLibraryPath [ pkgs.libuv ]} \
-                --clang-includes ${pkgs.lib.makeIncludePath [ pkgs.libuv ]}" \
-                --prefix PATH : ${
-                  pkgs.lib.makeBinPath
-                  (pkgs.lib.concatMap (b: b.buildInputs) backends)
-                }
+              ${wrapEffekt { backends = backends; }}
             '';
 
             meta = effektMeta;
@@ -180,15 +189,7 @@
               mkdir -p $out/bin $out/lib
               mv bin/effekt $out/lib/effekt.jar
               mv libraries $out/libraries
-
-              makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
-                --add-flags "-jar $out/lib/effekt.jar --clang-includes ${
-                  pkgs.lib.makeLibraryPath [ pkgs.libuv ]
-                } --clang-libraries ${pkgs.lib.makeLibraryPath [ pkgs.libuv ]}"\
-                --prefix PATH : ${
-                  pkgs.lib.makeBinPath
-                  (pkgs.lib.concatMap (b: b.buildInputs) backends)
-                }
+              ${wrapEffekt { backends = backends; }} 
             '';
 
             meta = effektMeta;
