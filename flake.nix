@@ -265,20 +265,10 @@
                     echo "Building test ${test} with backend ${backendForCheck.name}"
                     effekt --build --backend ${backendForCheck.name} --out $TMPDIR/testout ${src}/${test}
 
-                    echo "DEBUG: Checking generated file type:"
-                    file $TMPDIR/testout/$(basename ${test} .effekt)
-
-                    echo "DEBUG: First 3 lines of generated file:"
-                    head -n3 $TMPDIR/testout/$(basename ${test} .effekt)
-
-                    echo "DEBUG: Checking if /usr/bin/env exists:"
-                    ls -la /usr/bin/env || echo "/usr/bin/env does NOT exist"
+                    # Patch the shebang before wrapping
+                    patchShebangs $TMPDIR/testout/$(basename ${test} .effekt)
 
                     mv $TMPDIR/testout/$(basename ${test} .effekt) $TMPDIR/testout/$(basename ${test} .effekt).unwrapped
-
-                    echo "DEBUG: First 3 lines of .unwrapped file:"
-                    head -n3 $TMPDIR/testout/$(basename ${test} .effekt).unwrapped
-
                     makeWrapper $TMPDIR/testout/$(basename ${test} .effekt).unwrapped $TMPDIR/testout/$(basename ${test} .effekt) \
                       --prefix PATH : ${pkgs.lib.makeBinPath backendForCheck.runtimeInputs}
 
