@@ -214,6 +214,7 @@
 
               # Runtime dependencies for the build environment (needed for tests)
               buildInputs = buildInputs
+                ++ pkgs.lib.concatMap (b: b.buildInputs) backends # Needed to build the tests
                 ++ pkgs.lib.concatMap (b: b.runtimeInputs) backends;
 
               buildPhase = ''
