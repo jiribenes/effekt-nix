@@ -210,7 +210,7 @@
                 effektBuild
                 pkgs.gnused
                 pkgs.makeWrapper
-              ] ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
+              ];
 
               # Runtime dependencies for the build environment (needed for tests)
               buildInputs = buildInputs
