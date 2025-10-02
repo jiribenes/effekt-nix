@@ -265,11 +265,6 @@
                     echo "Building test ${test} with backend ${backendForCheck.name}"
                     effekt --build --backend ${backendForCheck.name} --out $TMPDIR/testout ${src}/${test}
 
-                    echo "Patching and wrapping the test"
-                    ${if backendForCheck.runtime != null then ''
-                      sed -i '1c#!/usr/bin/env ${backendForCheck.runtime}' $TMPDIR/testout/$(basename ${test} .effekt)
-                    '' else ""}
-
                     mv $TMPDIR/testout/$(basename ${test} .effekt) $TMPDIR/testout/$(basename ${test} .effekt).unwrapped
                     makeWrapper $TMPDIR/testout/$(basename ${test} .effekt).unwrapped $TMPDIR/testout/$(basename ${test} .effekt) \
                       --prefix PATH : ${pkgs.lib.makeBinPath backendForCheck.runtimeInputs}
