@@ -270,6 +270,7 @@
                       --prefix PATH : ${pkgs.lib.makeBinPath backendForCheck.runtimeInputs}
 
                     echo "Running the test:"
+                    echo $(head -n1 $TMPDIR/testout/$(basename ${test} .effekt))
                     $TMPDIR/testout/$(basename ${test} .effekt)
 
                     rm -rf $TMPDIR/testout
