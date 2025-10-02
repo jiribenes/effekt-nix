@@ -67,8 +67,8 @@
           llvm = {
             name = "llvm";
             outputName = "llvm";
-            buildInputs = [pkgs.llvmPackages.clang pkgs.libuv];  # Needed for compilation
-            runtimeInputs = [pkgs.libuv];                        # Only libuv needed at runtime
+            buildInputs = [pkgs.clang pkgs.libuv];  # Needed for compilation
+            runtimeInputs = [pkgs.libuv];           # Only libuv needed at runtime
             processOutput = backendUtils.standardBinary;
             runtime = null;
           };
@@ -221,7 +221,7 @@
                 mkdir -p out
 
                 ${pkgs.lib.concatMapStrings (backend: ''
-                  echo "Building with backend ${backend.name} file ${src}/${main}"
+                  echo "Building with backend ${backend.name} file ${src}/${main}."
                   effekt --build --backend ${backend.name} ${src}/${main}
 
                   ${backend.processOutput pname backend "${src}/${main}"}
