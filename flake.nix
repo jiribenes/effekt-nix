@@ -237,17 +237,7 @@
                 mkdir -p $out/bin
                 cp -r out/* $out/bin/
 
-                # Wrap each backend's output with its runtime dependencies
-                ${pkgs.lib.concatMapStrings (backend:
-                  if backend.runtime != null || (backend.runtimeInputs != []) then ''
-                    echo "Wrapping ${pname}-${backend.outputName} with runtime dependencies"
-                    mv $out/bin/${pname}-${backend.outputName} $out/bin/${pname}-${backend.outputName}.unwrapped
-                    makeWrapper $out/bin/${pname}-${backend.outputName}.unwrapped $out/bin/${pname}-${backend.outputName} \
-                      --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs}
-                  '' else ""
-                ) backends}
-
-                # Create default symlink if not web backend
+                # Create default symlink to the first backend's output if it has a runtime
                 ${if defaultBackend.runtime != null then ''
                   ln -s $out/bin/${pname}-${defaultBackend.outputName} $out/bin/${pname}
                 '' else ""}
