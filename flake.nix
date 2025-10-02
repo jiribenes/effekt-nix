@@ -67,8 +67,8 @@
           llvm = {
             name = "llvm";
             outputName = "llvm";
-            buildInputs = [pkgs.llvm pkgs.clang pkgs.libuv];  # Needed for compilation
-            runtimeInputs = [pkgs.libuv pkgs.clang];                     # Only libuv needed at runtime
+            buildInputs = [pkgs.llvmPackages.clang pkgs.libuv];  # Needed for compilation
+            runtimeInputs = [pkgs.libuv];                        # Only libuv needed at runtime
             processOutput = backendUtils.standardBinary;
             runtime = null;
           };
