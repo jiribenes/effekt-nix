@@ -195,6 +195,7 @@
             backends ? [effektBackends.js],       # Effekt backends to use -- first backend is the "default" one
             jvmArgs ? ["-Xss32m"],                # JVM arguments for the compiler
             buildInputs ? [],                     # other build inputs required for the package
+            extraEffektFlags ? [],                # extra flags passed to the Effekt compiler
           }:
             assert backends != []; # Ensure at least one backend is specified
             let
@@ -224,7 +225,7 @@
 
                 ${pkgs.lib.concatMapStrings (backend: ''
                   echo "Building with backend ${backend.name} file ${src}/${main}"
-                  effekt --build --backend ${backend.name} ${src}/${main}
+                  effekt --build --backend ${backend.name} ${pkgs.lib.concatStringsSep " " extraEffektFlags} ${src}/${main}
 
                   ${backend.processOutput pname backend "${src}/${main}"}
 
@@ -266,7 +267,7 @@
                     mkdir -p $TMPDIR/testout
 
                     echo "Building test ${test} with backend ${backendForCheck.name}"
-                    effekt --build --backend ${backendForCheck.name} --out $TMPDIR/testout ${src}/${test}
+                    effekt --build --backend ${backendForCheck.name} ${pkgs.lib.concatStringsSep " " extraEffektFlags} --out $TMPDIR/testout ${src}/${test}
 
                     # Patch the shebang before wrapping
                     patchShebangs $TMPDIR/testout/$(basename ${test} .effekt)
