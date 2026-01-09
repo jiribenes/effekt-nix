@@ -102,7 +102,8 @@
         buildEffektRelease = {
           version,
           sha256,
-          backends ? [effektBackends.js]
+          backends ? [effektBackends.js],
+          jvmArgs ? ["-Xss32m"]
         }:
           assert backends != []; # Ensure at least one backend is specified
           pkgs.stdenv.mkDerivation {
@@ -123,7 +124,7 @@
               mv libraries $out/libraries
 
               makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
-                --add-flags "-jar $out/lib/effekt.jar" \
+                --add-flags "${pkgs.lib.concatStringsSep " " jvmArgs} -jar $out/lib/effekt.jar" \
                 --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) backends)}
             '';
 
@@ -136,6 +137,7 @@
           version,
           depsSha256, # SHA256 of the Scala dependencies
           backends ? [effektBackends.js],
+          jvmArgs ? ["-Xss32m"]
         }:
           assert backends != []; # Ensure at least one backend is specified
           sbt-derivation.lib.mkSbtDerivation {
@@ -173,7 +175,7 @@
               mv libraries $out/libraries
 
               makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
-                --add-flags "-jar $out/lib/effekt.jar" \
+                --add-flags "${pkgs.lib.concatStringsSep " " jvmArgs} -jar $out/lib/effekt.jar" \
                 --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) backends)}
             '';
 
@@ -191,6 +193,7 @@
             effekt ? null,                        # the explicit Effekt derivation to use: uses latest release if not set
             effektVersion ? latestVersion,        # the Effekt version to use
             backends ? [effektBackends.js],       # Effekt backends to use -- first backend is the "default" one
+            jvmArgs ? ["-Xss32m"],                # JVM arguments for the compiler
             buildInputs ? [],                     # other build inputs required for the package
           }:
             assert backends != []; # Ensure at least one backend is specified
@@ -199,7 +202,7 @@
               effektBuild = if effekt != null then effekt else buildEffektRelease {
                 version = effektVersion;
                 sha256 = effektVersions.${effektVersion};
-                inherit backends;
+                inherit backends jvmArgs;
               };
             in
             pkgs.stdenv.mkDerivation {
@@ -288,13 +291,14 @@
         mkDevShell = {
           effekt ? null,
           effektVersion ? latestVersion,
-          backends ? [effektBackends.js]
+          backends ? [effektBackends.js],
+          jvmArgs ? ["-Xss32m"]
         }:
           let
             effektBuild = if effekt != null then effekt else buildEffektRelease {
               version = effektVersion;
               sha256 = effektVersions.${effektVersion};
-              inherit backends;
+              inherit backends jvmArgs;
             };
           in
           pkgs.mkShell {
@@ -338,7 +342,8 @@
         getEffekt =
           {
             version ? null,                 # Version as a string (leave null for the latest version)
-            backends ? [effektBackends.js]  # Supported backends
+            backends ? [effektBackends.js], # Supported backends
+            jvmArgs ? ["-Xss32m"]           # JVM arguments for the compiler
           }:
             assert backends != []; # Ensure at least one backend is specified
             let
@@ -348,7 +353,7 @@
               if sha256 == null
               then throw "Unsupported Effekt version: ${selectedVersion}"
               else buildEffektRelease {
-                inherit backends;
+                inherit backends jvmArgs;
                 version = selectedVersion;
                 inherit sha256;
               };
