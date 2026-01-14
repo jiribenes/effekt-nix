@@ -106,6 +106,16 @@
           jvmArgs ? ["-Xss32m"]
         }:
           assert backends != []; # Ensure at least one backend is specified
+          let 
+            hasLLVM = builtins.any (b: b.name == "llvm") backends;
+
+            # Create a clang wrapper that includes libc headers
+            clangWithHeaders = pkgs.writeShellScriptBin "clang" ''
+              exec ${pkgs.clang}/bin/clang \
+                -isystem ${pkgs.clang.libc.dev}/include \
+                "$@"
+            '';
+          in
           pkgs.stdenv.mkDerivation {
             pname = "effekt";
             inherit version;
@@ -118,7 +128,14 @@
             nativeBuildInputs = [pkgs.makeWrapper];
             buildInputs = [pkgs.jre] ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
-            installPhase = ''
+            installPhase = let
+              backendPaths = pkgs.lib.concatMap (b: b.buildInputs) backends;
+              # Put our clang wrapper FIRST so it shadows the real clang
+              pathsWithClangWrapper = 
+                if hasLLVM 
+                then [clangWithHeaders] ++ backendPaths
+                else backendPaths;
+            in ''
               mkdir -p $out/bin $out/lib
               mv bin/effekt $out/lib/effekt.jar
               mv libraries $out/libraries
