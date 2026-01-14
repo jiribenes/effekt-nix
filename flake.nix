@@ -106,15 +106,8 @@
           jvmArgs ? ["-Xss32m"]
         }:
           assert backends != []; # Ensure at least one backend is specified
-          let 
+          let
             hasLLVM = builtins.any (b: b.name == "llvm") backends;
-
-            # Create a clang wrapper that includes libc headers
-            clangWithHeaders = pkgs.writeShellScriptBin "clang" ''
-              exec ${pkgs.clang}/bin/clang \
-                -isystem ${pkgs.clang.libc.dev}/include \
-                "$@"
-            '';
           in
           pkgs.stdenv.mkDerivation {
             pname = "effekt";
@@ -128,21 +121,15 @@
             nativeBuildInputs = [pkgs.makeWrapper];
             buildInputs = [pkgs.jre] ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
-            installPhase = let
-              backendPaths = pkgs.lib.concatMap (b: b.buildInputs) backends;
-              # Put our clang wrapper FIRST so it shadows the real clang
-              pathsWithClangWrapper = 
-                if hasLLVM 
-                then [clangWithHeaders] ++ backendPaths
-                else backendPaths;
-            in ''
+            installPhase = ''
               mkdir -p $out/bin $out/lib
               mv bin/effekt $out/lib/effekt.jar
               mv libraries $out/libraries
 
               makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
                 --add-flags "${pkgs.lib.concatStringsSep " " jvmArgs} -jar $out/lib/effekt.jar" \
-                --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) backends)}
+                --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) backends)} \
+                ${pkgs.lib.optionalString hasLLVM ''--prefix CPATH : "${pkgs.lib.getDev pkgs.stdenv.cc.libc}/include"''}
             '';
 
             meta = effektMeta;
