@@ -150,18 +150,18 @@
             buildInputs = [pkgs.jre] ++ pkgs.lib.concatMap (b: b.buildInputs) backends;
 
             inherit depsSha256;
-            depsArchivalStrategy = "copy";
-            depsWarmupCommand = ''
-              echo "Warming up: getting compiler bridge thingy"
-              sbt scalaCompilerBridgeBinaryJar
-              echo "Warming up: updating"
-              sbt update
-              echo "Warming up: FINISHED"
-            '';
+
+            # XXX: Does this help?
+            overrideDepsAttrs = final: prev: {
+              preBuild = ''
+                export LANG=C.UTF-8
+                export JAVA_OPTS="-Dsbt.ivy.home=$out/ivy2 -Dsbt.boot.directory=$out/sbt-boot -Dsbt.global.base=$out/sbt-global"
+              '';
+            };
 
             # Change the version in build.sbt
             prePatch = ''
-              sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' build.sbt
+              sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' project/EffektVersion.scala
             '';
 
             buildPhase = ''
@@ -339,6 +339,29 @@
         # Quick alias for the latest pre-built Effekt derivation
         latestEffekt = autoPackages."effekt_${builtins.replaceStrings ["."] ["_"] latestVersion}";
 
+        # Fetch the Effekt source with submodules as a dirty input
+        # XXX: Can we do better than just `fetchFromGitHub`? I'd like this to be a flake input!
+        effektNightlySrc = (pkgs.fetchFromGitHub {
+          owner = "effekt-lang";
+          repo = "effekt";
+          rev = "21343a7";
+          sha256 = "sha256-wiPfHUbqPTZDjO0siIW+rz+5EcTCgcGWnk69twYRc/k=";
+          fetchSubmodules = true;
+        }).overrideAttrs (_: { # https://github.com/NixOS/nixpkgs/issues/195117#issuecomment-1410398050 via `lexa-lang/lexa`
+          GIT_CONFIG_COUNT = 1;
+          GIT_CONFIG_KEY_0 = "url.https://github.com/.insteadOf";
+          GIT_CONFIG_VALUE_0 = "git@github.com:";
+        });
+
+        # Builds the nightly version of Effekt using the flake input
+        nightlyEffekt = buildEffektFromSource {
+          # src = effekt-src-repo;
+          src = effektNightlySrc;
+          depsSha256 = "sha256-Yzv6lcIpu8xYv3K7ymoJIcnqJWem1sUWGSQm8253SUw=";
+          backends = builtins.attrValues effektBackends;
+          version = "0.99.99+nightly-${builtins.substring 0 8 effektNightlySrc.rev}";
+        };
+
         # Helpful function to get an Effekt package given version and backends
         getEffekt =
           {
@@ -368,12 +391,17 @@
         # Automatically generated packages + latest version (as default)
         packages = autoPackages // {
           default = latestEffekt;
+          effekt_nightly = nightlyEffekt;
         };
 
         # Development shells
         devShells = autoDevShells // {
           default = mkDevShell {
             effektVersion = latestVersion;
+            backends = builtins.attrValues effektBackends;
+          };
+          effekt_nightly = mkDevShell {
+            effekt = nightlyEffekt;
             backends = builtins.attrValues effektBackends;
           };
           compilerDev = compilerDevShell;
