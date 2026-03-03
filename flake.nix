@@ -38,6 +38,19 @@
           '';
         };
 
+        # Effekt searches for `clang-XY` on PATH.
+        clangWithVersionAliases = pkgs.symlinkJoin {
+          name = "clang-wrapped-with-aliases";
+          paths = [ pkgs.clang ];
+          postBuild = ''
+            for v in 18 19 20 21; do
+              if [ ! -e $out/bin/clang-$v ]; then
+                ln -sf $out/bin/clang $out/bin/clang-$v
+              fi
+            done
+          '';
+        };
+
         # Available backends for Effekt
         effektBackends = {
           js = {
@@ -67,7 +80,7 @@
           llvm = {
             name = "llvm";
             outputName = "llvm";
-            buildInputs = [pkgs.llvm pkgs.clang pkgs.libuv];  # Needed for compilation
+            buildInputs = [clangWithVersionAliases pkgs.libuv];  # Needed for compilation
             runtimeInputs = [pkgs.libuv];          # Only libuv needed at runtime
             processOutput = backendUtils.standardBinary;
             runtime = null;
