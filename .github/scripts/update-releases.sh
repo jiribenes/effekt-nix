@@ -14,7 +14,7 @@ fi
 # Download release and compute hash using Nix
 url="https://github.com/effekt-lang/effekt/releases/download/v${latest_version}/effekt.tgz"
 hash=$(nix-prefetch-url "$url" --type sha256)
-base64=$(nix hash to-base64 --type sha256 "$hash")
+base64=$(nix hash convert --hash-algo sha256 --to base64 "$hash")
 
 # Update releases.json
 jq --arg v "$latest_version" --arg h "$base64" '. + {($v): $h}' releases.json > releases.json.new
