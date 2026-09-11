@@ -7,7 +7,7 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
 
 ## Features
 
-- pre-packaged Effekt compiler releases for all platforms supported by Nixpkgs, and for any subset of Effekt's backends
+- pre-packaged Effekt compiler releases for `x86_64-linux`, `aarch64-linux`, and `aarch64-darwin`, and for any subset of Effekt's backends
 - building the Effekt compiler from source or from a GitHub Release
 - pre-made development shells with Effekt compiler releases and for Effekt compiler development
 - Nix toolchain to build, test, and package apps written in Effekt
@@ -102,11 +102,11 @@ You can use this Nix flake directly, but there's also a full template with CI av
     let
       system = "x86_64-linux"; # or "aarch64-darwin" if you're on a M1
       pkgs = nixpkgs.legacyPackages.${system};
-      effekt-lib = effekt-nix.lib.${system};
+      effekt-lib = effekt-nix.lib.mkLib pkgs;
 
       # You can set a fixed Effekt version and your supported backends here:
       effektVersion = "0.3.0";
-      backends = with effekt-lib.effektBackends; [ js llvm ];
+      backends = bs: [ bs.js bs.llvm ];
     in {
       # A package for your Effekt project
       packages.${system}.default = effekt-lib.buildEffektPackage {
@@ -119,7 +119,7 @@ You can use this Nix flake directly, but there's also a full template with CI av
       };
 
       # Development shell for your project
-      devShell.${system}.default = effekt-lib.mkDevShell {
+      devShells.${system}.default = effekt-lib.mkDevShell {
         inherit effektVersion backends;
       };
     };
@@ -135,13 +135,13 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 - `tests`: (Optional) A list of test files to run during the build process.
 - `effekt`: (Optional) A specific Effekt derivation to use. If not provided, it uses the version specified by `effektVersion`.
 - `effektVersion`: The version of Effekt to use (defaults to the latest version).
-- `backends`: A list of backends to compile your project with. The first backend in the list is considered the default.
+- `backends`: A function selecting the backends to compile your project with, e.g. `bs: [ bs.js bs.llvm ]`. The first backend in the list is considered the default.
 - `buildInputs`: (Optional) Additional build inputs required for your package.
 
 The function will compile your project with all specified backends and create a binary for each.
 It also sets up a symbolic link to the default backend's binary under the `pname`.
 
-`effekt-nix` also supports multiple platforms. Use `flake-utils` and its `flake-utils.lib.eachDefaultSystem` (or alternatives)
+`effekt-nix` also supports multiple platforms (see `effekt-nix.lib.supportedSystems`). Use `nixpkgs.lib.genAttrs effekt-nix.lib.supportedSystems` (like the [template](https://github.com/jiribenes/effekt-template/blob/main/flake.nix))
 to define outputs for multiple systems at the same time.
 
 ### Using a custom Effekt compiler build for your app
@@ -154,13 +154,17 @@ to define outputs for multiple systems at the same time.
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
-      effekt-lib = effekt-nix.lib.${system};
+      effekt-lib = effekt-nix.lib.mkLib pkgs;
       
       # Define your own Effekt build from source:
       myCustomEffekt = effekt-lib.buildEffektFromSource {
         # ... by defining the path to your compiler source here:
         src = ./path/to/effekt/compiler/source;
-        backends = with effekt-lib.effektBackends; [ js llvm ];
+        # ... its version:
+        version = "0.99.0";
+        # ... and the SHA256 of its Scala dependencies (build with a fake one first, Nix then tells you the correct one):
+        depsSha256 = pkgs.lib.fakeSha256;
+        backends = bs: [ bs.js bs.llvm ];
       };
     in {
       packages.${system}.default = effekt-lib.buildEffektPackage {
@@ -173,7 +177,7 @@ to define outputs for multiple systems at the same time.
         effekt = myCustomEffekt;
       };
 
-      devShell.${system}.default = effekt-lib.mkDevShell {
+      devShells.${system}.default = effekt-lib.mkDevShell {
         effekt = myCustomEffekt;
       };
     };
