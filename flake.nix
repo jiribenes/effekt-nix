@@ -28,8 +28,10 @@
       # Gets the newest version from 'effektVersions'
       latestVersion = builtins.head (builtins.sort (a: b: builtins.compareVersions a b > 0) (builtins.attrNames effektVersions));
 
+      versionSuffix = builtins.replaceStrings ["."] ["_"]; # '0.79.0' ~> '0_79_0'
+
       # Gets the name of the package for an Effekt version, e.g. 'effekt_0_79_0'
-      versionAttrName = version: "effekt_${builtins.replaceStrings ["."] ["_"] version}";
+      versionAttrName = version: "effekt_${versionSuffix version}";
 
       # Creates the helper functions and types for the given nixpkgs 'pkgs'
       mkLib = pkgs:
@@ -89,6 +91,7 @@
             js = {
               name = "js";
               outputName = "js";
+              minVersion = "0.3.0";           # Note: 0.2.2 works, but its launcher hardcodes an absolute build path
               buildInputs = [pkgs.nodejs];    # Needed for the compiler
               runtimeInputs = [pkgs.nodejs];  # Needed to run the programs
               compilerEnv = {};
@@ -98,6 +101,7 @@
             js-web = {
               name = "js-web";
               outputName = "js-web";
+              minVersion = "0.3.0";
               buildInputs = [pkgs.nodejs];    # For tests, we currently use the 'js' backend
               runtimeInputs = [];             # Web output doesn't need runtime deps
               compilerEnv = {};
@@ -107,6 +111,7 @@
             llvm = {
               name = "llvm";
               outputName = "llvm";
+              minVersion = "0.2.2";
               buildInputs = [clangWithVersionAliases pkgs.llvm pkgs.libuv]; # Supporting older versions of Effekt that used `llc`/`opt`
               runtimeInputs = [pkgs.libuv];                                 # Only libuv needed at runtime
               compilerEnv = { # Explicitly add libuv to CPATH and LIBRARY_PATH env vars
@@ -119,6 +124,7 @@
             chez-callcc = {
               name = "chez-callcc";
               outputName = "chez-callcc";
+              minVersion = "0.2.2";
               buildInputs = [pkgs.chez];
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
@@ -128,6 +134,7 @@
             chez-monadic = {
               name = "chez-monadic";
               outputName = "chez-monadic";
+              minVersion = "0.2.2";
               buildInputs = [pkgs.chez];
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
@@ -137,6 +144,7 @@
             chez-cps = {
               name = "chez-cps";
               outputName = "chez-cps";
+              minVersion = "0.54.0";
               buildInputs = [pkgs.chez];
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
@@ -145,12 +153,23 @@
             };
           };
 
-          # Selects backends from 'effektBackends' using the given function, e.g. 'bs: [bs.js bs.llvm]'
-          selectBackends = backends:
+          # The backends an Effekt version actually supports
+          backendsFor = version: pkgs.lib.mapAttrs (name: backend:
+            if pkgs.lib.versionAtLeast version backend.minVersion
+            then backend
+            else throw "The '${name}' backend needs Effekt ${backend.minVersion} or newer (selected: ${version})"
+          ) effektBackends;
+
+          # All backends that exist in an Effekt version, as a list (for 'all backends' packages)
+          availableBackends = version:
+            builtins.attrValues (pkgs.lib.filterAttrs (_: b: pkgs.lib.versionAtLeast version b.minVersion) effektBackends);
+
+          # Selects backends for an Effekt version using the given function, e.g. 'bs: [bs.js bs.llvm]'
+          selectBackends = version: backends:
             let
               selected =
                 if builtins.isFunction backends
-                then backends effektBackends
+                then backends (backendsFor version)
                 else throw "Backends must be selected by a function, e.g. 'bs: [bs.js]' (available backends: ${pkgs.lib.concatStringsSep ", " (builtins.attrNames effektBackends)})";
             in
               assert pkgs.lib.assertMsg (selected != []) "At least one backend must be specified";
@@ -180,7 +199,7 @@
             jvmArgs ? ["-Xss32m"]
           }:
             let
-              selectedBackends = selectBackends backends;
+              selectedBackends = selectBackends version backends;
             in
             pkgs.stdenv.mkDerivation {
               pname = "effekt";
@@ -216,7 +235,7 @@
             jvmArgs ? ["-Xss32m"]
           }:
             let
-              selectedBackends = selectBackends backends;
+              selectedBackends = selectBackends version backends;
             in
             mkSbtDerivation {
               inherit pkgs;
@@ -260,6 +279,20 @@
               meta = effektMeta;
             };
 
+          # Resolves the compiler and its backends from the arguments that packages and dev-shells share
+          # Note: the defaults here have to be in sync with its call sites!
+          resolveEffekt = { effekt ? null, effektVersion ? latestVersion, backends ? (bs: [bs.js]), jvmArgs ? ["-Xss32m"], ... }:
+            let # TODO(jiribenes): should this be a `rec` instead?
+              effektBuild = if effekt != null then effekt else getEffekt {
+                version = effektVersion;
+                inherit backends jvmArgs;
+              };
+            in {
+              inherit effektBuild;
+              # The compiler knows its own version, so gating also works for a custom build
+              selectedBackends = selectBackends (effektBuild.version or effektVersion) backends;
+            };
+
           # Builds an Effekt package
           buildEffektPackage =
             {
@@ -278,15 +311,10 @@
               preBuild ? "",                        # runs before the Effekt build
               postBuild ? "",                       # runs after the Effekt build
               meta ? {},                            # package metadata
-            }:
+            }@args:
               let
-                selectedBackends = selectBackends backends;
+                inherit (resolveEffekt args) selectedBackends effektBuild;
                 defaultBackend = builtins.head selectedBackends;
-                effektBuild = if effekt != null then effekt else buildEffektRelease {
-                  version = effektVersion;
-                  sha256 = effektVersions.${effektVersion};
-                  inherit backends jvmArgs;
-                };
               in
               pkgs.stdenv.mkDerivation {
                 inherit pname version src;
@@ -375,14 +403,9 @@
             effektVersion ? latestVersion,
             backends ? (bs: [bs.js]),
             jvmArgs ? ["-Xss32m"]
-          }:
+          }@args:
             let
-              selectedBackends = selectBackends backends;
-              effektBuild = if effekt != null then effekt else buildEffektRelease {
-                version = effektVersion;
-                sha256 = effektVersions.${effektVersion};
-                inherit backends jvmArgs;
-              };
+              inherit (resolveEffekt args) selectedBackends effektBuild;
             in
             pkgs.mkShell {
               buildInputs = [effektBuild]
@@ -410,7 +433,7 @@
                 };
 
         in {
-          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends;
+          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends availableBackends;
         };
     in {
       # Helper functions and types for external use (see 'mkLib')
@@ -430,7 +453,7 @@
               effektLib.buildEffektRelease {
                 inherit version;
                 sha256 = effektVersions.${version};
-                backends = bs: builtins.attrValues bs;
+                backends = _: effektLib.availableBackends version;
               }
             )
           ) effektVersions;
@@ -451,7 +474,7 @@
             pkgs.lib.nameValuePair (versionAttrName version) (
               effektLib.mkDevShell {
                 effektVersion = version;
-                backends = bs: builtins.attrValues bs;
+                backends = _: effektLib.availableBackends version;
               }
             )
           ) effektVersions;
@@ -498,8 +521,38 @@
           # One check per backend that produces an executable
           perBackend = pkgs.lib.mapAttrs (name: _: runCheck name (_: [effektLib.effektBackends.${name}]) "Hello from effekt-nix!")
             (pkgs.lib.filterAttrs (_: b: b.producesExecutable) effektLib.effektBackends);
+
+          checkedVersions = ["0.2.2" "0.3.0" "0.12.0" "0.22.0" "0.32.0" "0.41.0" "0.51.0" "0.54.0" "0.61.0" "0.71.0" latestVersion];
+
+          # Builds and runs the fixture with one backend on one Effekt version
+          runVersionCheck = version: backendName:
+            let
+              checkName = "check-${backendName}-${versionSuffix version}";
+              package = effektLib.buildEffektPackage {
+                pname = checkName;
+                version = "0.0.0";
+                src = ./tests/hello;
+                main = "main.effekt";
+                effektVersion = version;
+                backends = bs: [bs.${backendName}];
+              };
+            in pkgs.runCommand checkName {} ''
+              ${pkgs.lib.getExe package} | grep -q "Hello from effekt-nix!"
+              touch $out
+            '';
+
+          # 'js' across the whole range, 'llvm' on a few -- but only where the backend exists (see 'minVersion')
+          backendsToCheck = version:
+            pkgs.lib.filter (name: pkgs.lib.versionAtLeast version effektLib.effektBackends.${name}.minVersion)
+              (["js"] ++ pkgs.lib.optionals (builtins.elem version ["0.2.2" "0.32.0" latestVersion]) ["llvm"]);
+
+          versionChecks = builtins.listToAttrs (pkgs.lib.concatMap (version:
+            map (backendName:
+              pkgs.lib.nameValuePair "${backendName}-${versionSuffix version}" (runVersionCheck version backendName)
+            ) (backendsToCheck version)
+          ) checkedVersions);
         in
-        perBackend // {
+        perBackend // versionChecks // {
           # Two backends whose artifacts used to overwrite each other in a shared output directory.
           both-chez = runCheck "both-chez" (bs: [bs.chez-callcc bs.chez-monadic]) "Hello from effekt-nix!";
 
