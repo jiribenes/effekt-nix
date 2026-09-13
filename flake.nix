@@ -82,15 +82,6 @@
               processOutput = backendUtils.webOutput;
               runtime = null;
             };
-            js-bun = {
-              name = "js";
-              outputName = "js-bun";
-              buildInputs = [pkgs.nodejs];    # Still need nodejs for compilation
-              runtimeInputs = [pkgs.bun];     # But use bun for running
-              compilerEnv = {};
-              processOutput = backendUtils.standardBinary;
-              runtime = "bun";
-            };
             llvm = {
               name = "llvm";
               outputName = "llvm";
