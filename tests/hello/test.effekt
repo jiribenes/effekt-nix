@@ -1,0 +1,4 @@
+def main() = {
+  val x = 20 + 22
+  println("test: " ++ x.show)
+}

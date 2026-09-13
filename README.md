@@ -137,9 +137,15 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 - `effektVersion`: The version of Effekt to use (defaults to the latest version).
 - `backends`: A function selecting the backends to compile your project with, e.g. `bs: [ bs.js bs.llvm ]`. The first backend in the list is considered the default.
 - `buildInputs`: (Optional) Additional build inputs required for your package.
+- `nativeBuildInputs`: (Optional) Additional build-time-only tools, such as for `preBuild`.
+- `effektFlags`: (Optional) Flags passed to the Effekt compiler, for example `[ "--no-optimize" ]`.
+- `preBuild` / `postBuild`: (Optional) Shell code to run before / after the Effekt build.
+- `meta`: (Optional) Package metadata such as `description` or `license`. Note that `mainProgram` is pre-set for you.
 
-The function will compile your project with all specified backends and create a binary for each.
-It also sets up a symbolic link to the default backend's binary under the `pname`.
+The function will compile your project with all specified backends and create a binary for each:
+`bin/${pname}-${backend}`, plus a symbolic link to the default backend's binary under the `pname`.
+Each backend is built separately, so the backends cannot overwrite each other's files:
+their artifacts live in `libexec/${pname}/${backend}/`, except for `js-web`, whose `.js`/`.html` pair ends up in `share/${pname}/`.
 
 `effekt-nix` also supports multiple platforms (see `effekt-nix.lib.supportedSystems`). Use `nixpkgs.lib.genAttrs effekt-nix.lib.supportedSystems` (like the [template](https://github.com/jiribenes/effekt-template/blob/main/flake.nix))
 to define outputs for multiple systems at the same time.
