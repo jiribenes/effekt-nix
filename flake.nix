@@ -69,6 +69,7 @@
               outputName = "js";
               buildInputs = [pkgs.nodejs];    # Needed for the compiler
               runtimeInputs = [pkgs.nodejs];  # Needed to run the programs
+              compilerEnv = {};
               processOutput = backendUtils.standardBinary;
               runtime = "node";
             };
@@ -77,6 +78,7 @@
               outputName = "js-web";
               buildInputs = [pkgs.nodejs];    # For tests, we currently use the 'js' backend
               runtimeInputs = [];             # Web output doesn't need runtime deps
+              compilerEnv = {};
               processOutput = backendUtils.webOutput;
               runtime = null;
             };
@@ -85,14 +87,19 @@
               outputName = "js-bun";
               buildInputs = [pkgs.nodejs];    # Still need nodejs for compilation
               runtimeInputs = [pkgs.bun];     # But use bun for running
+              compilerEnv = {};
               processOutput = backendUtils.standardBinary;
               runtime = "bun";
             };
             llvm = {
               name = "llvm";
               outputName = "llvm";
-              buildInputs = [clangWithVersionAliases pkgs.libuv];  # Needed for compilation
-              runtimeInputs = [pkgs.libuv];          # Only libuv needed at runtime
+              buildInputs = [clangWithVersionAliases pkgs.llvm pkgs.libuv]; # Supporting older versions of Effekt that used `llc`/`opt`
+              runtimeInputs = [pkgs.libuv];                                 # Only libuv needed at runtime
+              compilerEnv = { # Explicitly add libuv to CPATH and LIBRARY_PATH env vars
+                CPATH = pkgs.lib.makeIncludePath [pkgs.libuv];
+                LIBRARY_PATH = pkgs.lib.makeLibraryPath [pkgs.libuv];
+              };
               processOutput = backendUtils.standardBinary;
               runtime = null;
             };
@@ -101,6 +108,7 @@
               outputName = "chez-callcc";
               buildInputs = [pkgs.chez];
               runtimeInputs = [pkgs.chez];
+              compilerEnv = {};
               processOutput = backendUtils.standardBinary;
               runtime = "scheme";
             };
@@ -109,6 +117,7 @@
               outputName = "chez-monadic";
               buildInputs = [pkgs.chez];
               runtimeInputs = [pkgs.chez];
+              compilerEnv = {};
               processOutput = backendUtils.standardBinary;
               runtime = "scheme";
             };
@@ -124,6 +133,12 @@
             in
               assert pkgs.lib.assertMsg (selected != []) "At least one backend must be specified";
               selected;
+
+          mkCompilerEnvArgs = selectedBackends:
+            let # Backends declare a search path per variable, e.g. 'CPATH = "/nix/store/...-libuv-dev/include"'
+              merged = pkgs.lib.zipAttrsWith (_: pkgs.lib.concatStringsSep ":") (map (b: b.compilerEnv) selectedBackends);
+            in # Splices into the 'makeWrapper' call and disappears for backends that need nothing
+              pkgs.lib.concatStrings (pkgs.lib.mapAttrsToList (name: path: " --prefix ${name} : \"${path}\"") merged);
 
           # Meta information about the Effekt programming language
           effektMeta = {
@@ -162,7 +177,7 @@
 
                 makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
                   --add-flags "${pkgs.lib.concatStringsSep " " jvmArgs} -jar $out/lib/effekt.jar" \
-                  --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) selectedBackends)}
+                  --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) selectedBackends)}${mkCompilerEnvArgs selectedBackends}
               '';
 
               meta = effektMeta;
@@ -215,7 +230,7 @@
 
                 makeWrapper ${pkgs.jre}/bin/java $out/bin/effekt \
                   --add-flags "${pkgs.lib.concatStringsSep " " jvmArgs} -jar $out/lib/effekt.jar" \
-                  --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) selectedBackends)}
+                  --prefix PATH : ${pkgs.lib.makeBinPath (pkgs.lib.concatMap (b: b.buildInputs) selectedBackends)}${mkCompilerEnvArgs selectedBackends}
               '';
 
               meta = effektMeta;
