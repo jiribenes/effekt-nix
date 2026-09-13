@@ -349,6 +349,8 @@
                         echo "Building test ${test} with backend ${backendForCheck.name}"
                         effekt --build --backend ${backendForCheck.name} ${pkgs.lib.escapeShellArgs effektFlags} --out $TMPDIR/testout/${backendForCheck.outputName} ${src}/${test}
 
+                        patchShebangs $TMPDIR/testout/${backendForCheck.outputName}
+
                         echo "Running the test:"
                         ( export PATH=${pkgs.lib.makeBinPath backendForCheck.runtimeInputs}''${PATH:+:}$PATH
                           $TMPDIR/testout/${backendForCheck.outputName}/$(basename ${test} .effekt) )
