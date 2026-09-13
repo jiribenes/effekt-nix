@@ -34,18 +34,40 @@
       # Creates the helper functions and types for the given nixpkgs 'pkgs'
       mkLib = pkgs:
         let
-          # Backend-specific processing functions
+          # Where a backend's launcher and artifacts live, defining the layout
+          launcherName = pname: backend: "${pname}-${backend.outputName}";
+          backendDir = pname: backend: "$out/libexec/${pname}/${backend.outputName}";
+          launcherPath = pname: backend: "${backendDir pname backend}/${launcherName pname backend}";
+
+          # Wraps a backend's launcher into '$out/bin/<pname>-<backend>' with its runtime dependencies
+          wrapLauncher = pname: backend: ''
+            makeWrapper ${launcherPath pname backend} $out/bin/${launcherName pname backend} \
+              --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs}
+          '';
+
+          # Installs a backend's artifacts; runs inside that backend's build directory
           backendUtils = {
-            # Standard binary output processing
+            # Effekt produces launchers that read files next to themselves ('require("./x.js")', '$SCRIPT_DIR/x.ss')
             standardBinary = pname: backend: mainFile: ''
-              mv out/$(basename ${mainFile} .effekt) out/${pname}-${backend.outputName}
+              mkdir -p $out/libexec/${pname}
+              cp -r . ${backendDir pname backend}
+              mv ${backendDir pname backend}/$(basename ${mainFile} .effekt) ${launcherPath pname backend}
+              ${wrapLauncher pname backend}
             '';
 
-            # Web output processing
+            # Self-contained native binaries: the executable is the only artifact we keep
+            nativeBinary = pname: backend: mainFile: ''
+              mkdir -p ${backendDir pname backend}
+              cp $(basename ${mainFile} .effekt) ${launcherPath pname backend}
+              ${wrapLauncher pname backend}
+            '';
+
+            # Web output: the '.js'/'.html' pair is the output, so it goes to '$out/share'
             webOutput = pname: backend: mainFile: ''
-              mv "out/$(basename ${mainFile} .effekt).js" out/${pname}.js
-              mv "out/$(basename ${mainFile} .effekt).html" out/${pname}.html
-              sed -i 's/src="main.js"/src="${pname}.js"/' out/${pname}.html
+              mkdir -p $out/share/${pname}
+              cp "$(basename ${mainFile} .effekt).js" $out/share/${pname}/${pname}.js
+              cp "$(basename ${mainFile} .effekt).html" $out/share/${pname}/${pname}.html
+              sed -i "s|src=\"$(basename ${mainFile} .effekt).js\"|src=\"${pname}.js\"|" $out/share/${pname}/${pname}.html
             '';
           };
 
@@ -71,7 +93,7 @@
               runtimeInputs = [pkgs.nodejs];  # Needed to run the programs
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              runtime = "node";
+              producesExecutable = true;
             };
             js-web = {
               name = "js-web";
@@ -80,7 +102,7 @@
               runtimeInputs = [];             # Web output doesn't need runtime deps
               compilerEnv = {};
               processOutput = backendUtils.webOutput;
-              runtime = null;
+              producesExecutable = false;     # Produces a '.js'/'.html' pair for the browser
             };
             llvm = {
               name = "llvm";
@@ -91,8 +113,8 @@
                 CPATH = pkgs.lib.makeIncludePath [pkgs.libuv];
                 LIBRARY_PATH = pkgs.lib.makeLibraryPath [pkgs.libuv];
               };
-              processOutput = backendUtils.standardBinary;
-              runtime = null;
+              processOutput = backendUtils.nativeBinary;
+              producesExecutable = true;
             };
             chez-callcc = {
               name = "chez-callcc";
@@ -101,7 +123,7 @@
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              runtime = "scheme";
+              producesExecutable = true;
             };
             chez-monadic = {
               name = "chez-monadic";
@@ -110,7 +132,7 @@
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              runtime = "scheme";
+              producesExecutable = true;
             };
             chez-cps = {
               name = "chez-cps";
@@ -119,7 +141,7 @@
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              runtime = "scheme";
+              producesExecutable = true;
             };
           };
 
@@ -134,10 +156,12 @@
               assert pkgs.lib.assertMsg (selected != []) "At least one backend must be specified";
               selected;
 
+          # 'makeWrapper' arguments for the environment the selected backends need (see 'compilerEnv')
           mkCompilerEnvArgs = selectedBackends:
-            let # Backends declare a search path per variable, e.g. 'CPATH = "/nix/store/...-libuv-dev/include"'
+            let
+              # Backends declare a search path per variable, e.g. 'CPATH = "/nix/store/...-libuv-dev/include"'
               merged = pkgs.lib.zipAttrsWith (_: pkgs.lib.concatStringsSep ":") (map (b: b.compilerEnv) selectedBackends);
-            in # Splices into the 'makeWrapper' call and disappears for backends that need nothing
+            in
               pkgs.lib.concatStrings (pkgs.lib.mapAttrsToList (name: path: " --prefix ${name} : \"${path}\"") merged);
 
           # Meta information about the Effekt programming language
@@ -249,7 +273,11 @@
               backends ? (bs: [bs.js]),             # Effekt backends to use -- first backend is the "default" one
               jvmArgs ? ["-Xss32m"],                # JVM arguments for the compiler
               buildInputs ? [],                     # other build inputs required for the package
-              extraEffektFlags ? [],                # extra flags passed to the Effekt compiler
+              nativeBuildInputs ? [],               # build-time-only tools
+              effektFlags ? [],                     # flags passed to the Effekt compiler, such as ["--no-optimize"]
+              preBuild ? "",                        # runs before the Effekt build
+              postBuild ? "",                       # runs after the Effekt build
+              meta ? {},                            # package metadata
             }:
               let
                 selectedBackends = selectBackends backends;
@@ -263,8 +291,11 @@
               pkgs.stdenv.mkDerivation {
                 inherit pname version src;
 
+                # Hooks for projects that need to do something around the Effekt build
+                inherit preBuild postBuild;
+
                 # Build-time only dependencies
-                nativeBuildInputs = [
+                nativeBuildInputs = nativeBuildInputs ++ [
                   effektBuild
                   pkgs.gnused
                   pkgs.makeWrapper
@@ -274,72 +305,66 @@
                 buildInputs = buildInputs
                   ++ pkgs.lib.concatMap (b: b.runtimeInputs) selectedBackends;
 
+                # Each backend builds into its own directory, or they overwrite each other's files (see 'UPSTREAM.md')
                 buildPhase = ''
-                  mkdir -p out
+                  runHook preBuild
 
                   ${pkgs.lib.concatMapStrings (backend: ''
                     echo "Building with backend ${backend.name} file ${src}/${main}"
-                    effekt --build --backend ${backend.name} ${pkgs.lib.concatStringsSep " " extraEffektFlags} ${src}/${main}
-
-                    ${backend.processOutput pname backend "${src}/${main}"}
-
-                    ${if backend.runtime != null then ''
-                      echo "Setting runtime to ${backend.runtime}"
-                      sed -i '1c#!/usr/bin/env ${backend.runtime}' out/${pname}-${backend.outputName}
-                    '' else ""}
+                    effekt --build --backend ${backend.name} ${pkgs.lib.escapeShellArgs effektFlags} --out build/${backend.outputName} ${src}/${main}
                   '') selectedBackends}
+
+                  runHook postBuild
                 '';
 
                 installPhase = ''
+                  runHook preInstall
+
                   mkdir -p $out/bin
-                  cp -r out/* $out/bin/
 
-                  # Wrap each backend's output with its runtime dependencies
-                  ${pkgs.lib.concatMapStrings (backend:
-                    if backend.runtime != null || (backend.runtimeInputs != []) then ''
-                      echo "Wrapping ${pname}-${backend.outputName} with runtime dependencies"
-                      mv $out/bin/${pname}-${backend.outputName} $out/bin/${pname}-${backend.outputName}.unwrapped
-                      makeWrapper $out/bin/${pname}-${backend.outputName}.unwrapped $out/bin/${pname}-${backend.outputName} \
-                        --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs}
-                    '' else ""
-                  ) selectedBackends}
+                  # Each backend installs its own artifacts, from inside its build directory
+                  ${pkgs.lib.concatMapStrings (backend: ''
+                    ( cd build/${backend.outputName}
+                      ${backend.processOutput pname backend "${src}/${main}"} )
+                  '') selectedBackends}
 
-                  # Create default symlink if not web backend
-                  ${if defaultBackend.runtime != null then ''
-                    ln -s $out/bin/${pname}-${defaultBackend.outputName} $out/bin/${pname}
-                  '' else ""}
+                  # Entry point is the default (first) backend, if it produces an executable at all
+                  ${pkgs.lib.optionalString defaultBackend.producesExecutable ''
+                    ln -s $out/bin/${launcherName pname defaultBackend} $out/bin/${pname}
+                  ''}
+
+                  runHook postInstall
                 '';
 
-                # Note: fixupPhase with patchShebangs should run after our wrapping
-
                 doCheck = tests != [];
-                checkPhase = pkgs.lib.concatMapStrings (test:
-                  pkgs.lib.concatMapStrings (backend:
-                    let
-                      backendForCheck = if backend == effektBackends.js-web then effektBackends.js else backend;
-                    in ''
-                      mkdir -p $TMPDIR/testout
+                checkPhase = ''
+                  runHook preCheck
 
-                      echo "Building test ${test} with backend ${backendForCheck.name}"
-                      effekt --build --backend ${backendForCheck.name} ${pkgs.lib.concatStringsSep " " extraEffektFlags} --out $TMPDIR/testout ${src}/${test}
+                  ${pkgs.lib.concatMapStrings (test:
+                    pkgs.lib.concatMapStrings (backend:
+                      let
+                        # The web backend produces no executable, so its tests run on 'js'
+                        backendForCheck = if backend == effektBackends.js-web then effektBackends.js else backend;
+                      in ''
+                        echo "Building test ${test} with backend ${backendForCheck.name}"
+                        effekt --build --backend ${backendForCheck.name} ${pkgs.lib.escapeShellArgs effektFlags} --out $TMPDIR/testout/${backendForCheck.outputName} ${src}/${test}
 
-                      # Patch the shebang before wrapping
-                      patchShebangs $TMPDIR/testout/$(basename ${test} .effekt)
+                        echo "Running the test:"
+                        ( export PATH=${pkgs.lib.makeBinPath backendForCheck.runtimeInputs}''${PATH:+:}$PATH
+                          $TMPDIR/testout/${backendForCheck.outputName}/$(basename ${test} .effekt) )
 
-                      mv $TMPDIR/testout/$(basename ${test} .effekt) $TMPDIR/testout/$(basename ${test} .effekt).unwrapped
-                      makeWrapper $TMPDIR/testout/$(basename ${test} .effekt).unwrapped $TMPDIR/testout/$(basename ${test} .effekt) \
-                        --prefix PATH : ${pkgs.lib.makeBinPath backendForCheck.runtimeInputs}
+                        rm -rf $TMPDIR/testout/${backendForCheck.outputName}
+                      ''
+                    ) selectedBackends
+                  ) tests}
 
-                      echo "Running the test:"
-                      $TMPDIR/testout/$(basename ${test} .effekt)
+                  runHook postCheck
+                '';
 
-                      rm -rf $TMPDIR/testout
-                    ''
-                  ) selectedBackends
-                ) tests;
-
-                # Entry point is the program called ${pname}
-                meta.mainProgram = pname;
+                # Anything the caller passes in 'meta' wins over our 'mainProgram'
+                meta = pkgs.lib.optionalAttrs defaultBackend.producesExecutable {
+                  mainProgram = pname;
+                } // meta;
               };
 
           # Creates a dev-shell for an Effekt package / version & backends
@@ -441,6 +466,68 @@
         }
       );
 
-      checks = forAllSystems (system: { });
+      # Builds *and runs* a hello world with each backend; the fixture is in `./tests/hello`
+      checks = forAllSystems (system:
+        let
+          pkgs = nixpkgsFor.${system};
+          effektLib = mkLib pkgs;
+
+          # A package built from './tests/hello' with the given backends
+          mkCheckPackage = name: backends: effektLib.buildEffektPackage {
+            pname = "check-${name}";
+            version = "0.0.0";
+            src = ./tests/hello;
+            main = "main.effekt";
+            tests = ["test.effekt"];
+            inherit backends;
+          };
+
+          # Runs every executable the package installed and checks what it prints
+          runCheck = name: backends: expected:
+            let package = mkCheckPackage name backends;
+            in pkgs.runCommand "check-${name}" {} ''
+              for exe in ${package}/bin/*; do
+                echo "running $exe"
+                "$exe" | grep -q "${expected}" || { echo "unexpected output from $exe"; exit 1; }
+              done
+              touch $out
+            '';
+
+          # One check per backend that produces an executable
+          perBackend = pkgs.lib.mapAttrs (name: _: runCheck name (_: [effektLib.effektBackends.${name}]) "Hello from effekt-nix!")
+            (pkgs.lib.filterAttrs (_: b: b.producesExecutable) effektLib.effektBackends);
+        in
+        perBackend // {
+          # Two backends whose artifacts used to overwrite each other in a shared output directory.
+          both-chez = runCheck "both-chez" (bs: [bs.chez-callcc bs.chez-monadic]) "Hello from effekt-nix!";
+
+          # The web backend produces no executable, so its '.js'/'.html' pair is the deliverable
+          js-web =
+            let package = mkCheckPackage "js-web" (bs: [bs.js-web]);
+            in pkgs.runCommand "check-js-web" {} ''
+              test -f ${package}/share/check-js-web/check-js-web.js
+              grep -q 'src="check-js-web.js"' ${package}/share/check-js-web/check-js-web.html
+              touch $out
+            '';
+
+          # Some projects like 'community/effekt-rejit' generate files before the Effekt build itself.
+          hooks =
+            let package = effektLib.buildEffektPackage {
+              pname = "check-hooks";
+              version = "0.0.0";
+              src = ./tests/hello;
+              main = "main.effekt";
+              backends = bs: [bs.js];
+              preBuild = ''mkdir -p build/js && echo "preBuild ran" > build/js/hook-marker.txt'';
+              postBuild = ''echo "postBuild ran" >> build/js/hook-marker.txt'';
+            };
+            in pkgs.runCommand "check-hooks" {} ''
+              ${pkgs.lib.getExe package} | grep -q "Hello from effekt-nix!"
+              grep -q "preBuild ran" ${package}/libexec/check-hooks/js/hook-marker.txt
+              grep -q "postBuild ran" ${package}/libexec/check-hooks/js/hook-marker.txt
+              touch $out
+            '';
+        }
+      );
     };
 }
