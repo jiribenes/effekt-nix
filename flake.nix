@@ -112,6 +112,15 @@
               processOutput = backendUtils.standardBinary;
               runtime = "scheme";
             };
+            chez-cps = {
+              name = "chez-cps";
+              outputName = "chez-cps";
+              buildInputs = [pkgs.chez];
+              runtimeInputs = [pkgs.chez];
+              compilerEnv = {};
+              processOutput = backendUtils.standardBinary;
+              runtime = "scheme";
+            };
           };
 
           # Selects backends from 'effektBackends' using the given function, e.g. 'bs: [bs.js bs.llvm]'
