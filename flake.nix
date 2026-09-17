@@ -256,9 +256,12 @@
                 echo "Warming up: FINISHED"
               '';
 
-              # Change the version in build.sbt
+              # Change the requested version in the compiler.
               prePatch = ''
-                sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' build.sbt
+                versionFile=project/EffektVersion.scala
+                grep -q 'lazy val effektVersion = "[^"]*"' "$versionFile" \
+                  || { echo "effekt-nix: cannot stamp the version: no 'effektVersion' assignment in $versionFile" >&2; exit 1; }
+                sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' "$versionFile"
               '';
 
               # Effekt has Scala identifiers outside ASCII (e.g., 'sealed trait ω' in util/Control.scala).
