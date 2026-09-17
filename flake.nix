@@ -293,8 +293,8 @@
               selectedBackends = selectBackends (effektBuild.version or effektVersion) backends;
             };
 
-          # Builds an Effekt package
-          buildEffektPackage =
+          # Builds an Effekt package, can be overriden as `package.override { ... }`
+          buildEffektPackage = pkgs.lib.makeOverridable (
             {
               pname,                                # package name
               version,                              # package version
@@ -395,7 +395,7 @@
                 meta = pkgs.lib.optionalAttrs defaultBackend.producesExecutable {
                   mainProgram = pname;
                 } // meta;
-              };
+              });
 
           # Creates a dev-shell for an Effekt package / version & backends
           mkDevShell = {
