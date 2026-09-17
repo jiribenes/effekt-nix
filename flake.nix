@@ -261,6 +261,10 @@
                 sed -i 's/lazy val effektVersion = "[^"]*"/lazy val effektVersion = "${version}"/' build.sbt
               '';
 
+              # Effekt has Scala identifiers outside ASCII (e.g., 'sealed trait ω' in util/Control.scala).
+              LANG = "C.UTF-8";
+              LC_ALL = "C.UTF-8";
+
               buildPhase = ''
                 export MAVEN_OPTS="-Dmaven.repo.local=$out/.m2/repository"
                 sbt assembleBinary
