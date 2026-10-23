@@ -96,7 +96,7 @@
               runtimeInputs = [pkgs.nodejs];  # Needed to run the programs
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              producesExecutable = true;
+              kind = "executable";
             };
             js-web = {
               name = "js-web";
@@ -106,7 +106,7 @@
               runtimeInputs = [];             # Web output doesn't need runtime deps
               compilerEnv = {};
               processOutput = backendUtils.webOutput;
-              producesExecutable = false;     # Produces a '.js'/'.html' pair for the browser
+              kind = "website";               # A '.js'/'.html' pair for the browser
             };
             llvm = {
               name = "llvm";
@@ -119,7 +119,7 @@
                 LIBRARY_PATH = pkgs.lib.makeLibraryPath [pkgs.libuv];
               };
               processOutput = backendUtils.nativeBinary;
-              producesExecutable = true;
+              kind = "executable";
             };
             chez-callcc = {
               name = "chez-callcc";
@@ -129,7 +129,7 @@
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              producesExecutable = true;
+              kind = "executable";
             };
             chez-monadic = {
               name = "chez-monadic";
@@ -139,7 +139,7 @@
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              producesExecutable = true;
+              kind = "executable";
             };
             chez-cps = {
               name = "chez-cps";
@@ -149,14 +149,25 @@
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              producesExecutable = true;
+              kind = "executable";
             };
           };
+
+          # A backend with per-project settings, e.g. 'bs.llvm.override { effektFlags = ["--optimize"]; }'; chainable
+          settableKeys = ["effektFlags" "makeWrapperArgs" "extraFiles"];
+          withSettings = backend: settings:
+            let unknown = builtins.filter (key: !(builtins.elem key settableKeys)) (builtins.attrNames settings); in
+            assert pkgs.lib.assertMsg (unknown == [])
+              "unknown setting(s) ${pkgs.lib.concatStringsSep ", " unknown} for backend '${backend.name}' (settable: ${pkgs.lib.concatStringsSep ", " settableKeys})";
+            backend // {
+              inherit settings;
+              override = more: withSettings backend (settings // more);
+            };
 
           # The backends an Effekt version actually supports
           backendsFor = version: pkgs.lib.mapAttrs (name: backend:
             if pkgs.lib.versionAtLeast version backend.minVersion
-            then backend
+            then withSettings backend {}
             else throw "The '${name}' backend needs Effekt ${backend.minVersion} or newer (selected: ${version})"
           ) effektBackends;
 
@@ -175,7 +186,7 @@
             in
               assert pkgs.lib.assertMsg (builtins.isList selected && builtins.all builtins.isAttrs selected) "'backends' must select a list of backends, e.g. 'bs: [bs.js]'";
               assert pkgs.lib.assertMsg (selected != []) "At least one backend must be specified";
-              map (b: available.${b.name}) selected;
+              map (b: available.${b.name}.override (b.settings or {})) selected;
 
           # Selects a single backend for an Effekt version using the given function, e.g. 'bs: bs.llvm'
           selectBackend = version: backend:
@@ -187,7 +198,7 @@
                 else throw "A backend must be selected by a function, e.g. 'bs: bs.js' (available backends: ${pkgs.lib.concatStringsSep ", " (builtins.attrNames effektBackends)})";
             in
               assert pkgs.lib.assertMsg (builtins.isAttrs selected) "'backend' must select a single backend, e.g. 'bs: bs.js'";
-              available.${selected.name};
+              available.${selected.name}.override (selected.settings or {});
 
           # 'makeWrapper' arguments for the environment the selected backends need (see 'compilerEnv')
           mkCompilerEnvArgs = selectedBackends:
@@ -330,6 +341,8 @@
             includes ? [],              # extra import roots, relative to 'src'
             effektLibraries ? [],       # other Effekt libraries; their paths become import roots
             moduleName ? null,          # the entry point's 'module' name, if it differs from its file name
+            nativeBuildInputs ? [],     # the project's build-time tools, besides the backend's
+            buildInputs ? [],           # the project's libraries, besides the backend's runtime
             pname ? null,
             version ? "0.0.0",
           }@args:
@@ -348,14 +361,14 @@
               pname = if pname != null then pname else "${artifactName}-${selectedBackend.name}";
               inherit version src;
 
-              nativeBuildInputs = [effektBuild] ++ selectedBackend.buildInputs;
+              nativeBuildInputs = [effektBuild] ++ selectedBackend.buildInputs ++ nativeBuildInputs;
               # 'patchShebangs' looks up the launcher's interpreter ('#!/usr/bin/env node') in 'buildInputs' only
-              buildInputs = selectedBackend.runtimeInputs;
+              buildInputs = selectedBackend.runtimeInputs ++ buildInputs;
 
               buildPhase = ''
                 runHook preBuild
                 effekt --${mode} --backend ${selectedBackend.name} \
-                  ${pkgs.lib.escapeShellArgs (includeArgs ++ effektFlags)} \
+                  ${pkgs.lib.escapeShellArgs (includeArgs ++ effektFlags ++ selectedBackend.settings.effektFlags or [])} \
                   --out $out ${main}
                 [ -f $out/${artifactName}${selectedBackend.extension} ] \
                   || { echo "effekt-nix: expected '${artifactName}${selectedBackend.extension}' from '${main}'; if it declares another 'module', pass 'moduleName'" >&2; exit 1; }
@@ -369,78 +382,89 @@
             };
 
           # Turn compiled artifacts into a runnable program
-          wrap = {
-            pname,
-            version ? "0.0.0",
-            compiled,                   # a derivation produced by 'compile'
-            makeWrapperArgs ? [],
-          }:
-            let inherit (compiled.passthru) backend artifactName; in
-            assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
-              "wrap needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
-            assert pkgs.lib.assertMsg backend.producesExecutable
-              "the '${backend.name}' backend produces no executable, so 'wrap' does not apply -- use 'mkSite'";
-            pkgs.stdenv.mkDerivation {
-              inherit pname version;
+          wrap = pkgs.lib.extendMkDerivation {
+            constructDrv = pkgs.stdenv.mkDerivation;
+            excludeDrvArgNames = ["compiled" "makeWrapperArgs"];
+            extendDrvArgs = finalAttrs: {
+              pname,
+              version ? "0.0.0",
+              compiled,                   # a derivation produced by 'compile'
+              makeWrapperArgs ? [],
+              ...
+            }@args:
+              let inherit (compiled.passthru) backend artifactName; in
+              assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
+                "wrap needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
+              assert pkgs.lib.assertMsg (backend.kind == "executable")
+                "wrap expects a backend that produces an executable (e.g. 'js'), but '${backend.name}' produces a website ~> use 'mkSite'";
+              {
+                inherit pname version;
 
-              dontUnpack = true;
-              nativeBuildInputs = [pkgs.makeWrapper];
+                dontUnpack = true;
+                nativeBuildInputs = (args.nativeBuildInputs or []) ++ [pkgs.makeWrapper];
 
-              installPhase = ''
-                runHook preInstall
+                installPhase = ''
+                  runHook preInstall
 
-                # The launcher reads files next to itself ('require("./main.js")'), so the compiler's output stays together
-                mkdir -p $out/libexec $out/bin
-                cp -r ${compiled} $out/libexec/${pname}
+                  # The launcher reads files next to itself ('require("./main.js")'), so the compiler's output stays together
+                  mkdir -p $out/libexec $out/bin
+                  cp -r ${compiled} $out/libexec/${finalAttrs.pname}
 
-                makeWrapper $out/libexec/${pname}/${artifactName} $out/bin/${pname} \
-                  --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs} \
-                  ${pkgs.lib.escapeShellArgs makeWrapperArgs}
+                  makeWrapper $out/libexec/${finalAttrs.pname}/${artifactName} $out/bin/${finalAttrs.pname} \
+                    --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs} \
+                    ${pkgs.lib.escapeShellArgs (makeWrapperArgs ++ backend.settings.makeWrapperArgs or [])}
 
-                runHook postInstall
-              '';
+                  runHook postInstall
+                '';
 
-              meta.mainProgram = pname;
-            };
+                # Anything the caller passes in 'meta' wins over our 'mainProgram'
+                meta = { mainProgram = finalAttrs.pname; } // (args.meta or {});
+              };
+          };
 
           # A website backend's output as a publishable site root, of real files: 'serve' answers a symlink with 404
-          mkSite = {
-            pname,
-            version ? "0.0.0",
-            compiled,                   # a derivation produced by 'compile' with a website backend
-            extraFiles ? [],            # project files copied into the site root; later entries win
-          }:
-            let inherit (compiled.passthru) backend artifactName; in
-            assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
-              "mkSite needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
-            assert pkgs.lib.assertMsg (!backend.producesExecutable)
-              "mkSite expects a website backend (e.g. 'js-web') but '${backend.name}' produces an executable ~> use 'wrap'";
-            pkgs.stdenv.mkDerivation {
-              inherit pname version;
+          mkSite = pkgs.lib.extendMkDerivation {
+            constructDrv = pkgs.stdenv.mkDerivation;
+            excludeDrvArgNames = ["compiled" "extraFiles"];
+            extendDrvArgs = finalAttrs: {
+              pname,
+              version ? "0.0.0",
+              compiled,                   # a derivation produced by 'compile' with a website backend
+              extraFiles ? [],            # project files copied into the site root; later entries win
+              ...
+            }:
+              let inherit (compiled.passthru) backend artifactName; in
+              assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
+                "mkSite needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
+              assert pkgs.lib.assertMsg (backend.kind == "website")
+                "mkSite expects a website backend (e.g. 'js-web') but '${backend.name}' produces an executable ~> use 'wrap'";
+              {
+                inherit pname version;
 
-              dontUnpack = true;
-              dontFixup = true;
+                dontUnpack = true;
+                dontFixup = true;
 
-              installPhase = ''
-                runHook preInstall
+                installPhase = ''
+                  runHook preInstall
 
-                mkdir -p $out
-                cp -r --no-preserve=mode ${compiled}/. $out/
+                  mkdir -p $out
+                  cp -r --no-preserve=mode ${compiled}/. $out/
 
-                mv $out/${artifactName}.html $out/index.html
+                  mv $out/${artifactName}.html $out/index.html
 
-                # Add extra files / directories
-                ${pkgs.lib.concatMapStrings (f: ''
-                  if [ -d ${f} ]; then
-                    cp -r --no-preserve=mode ${f}/. $out/
-                  else
-                    cp --no-preserve=mode ${f} $out/
-                  fi
-                '') (map (f: pkgs.lib.escapeShellArg "${f}") extraFiles)}
+                  # Add extra files / directories
+                  ${pkgs.lib.concatMapStrings (f: ''
+                    if [ -d ${f} ]; then
+                      cp -r --no-preserve=mode ${f}/. $out/
+                    else
+                      cp --no-preserve=mode ${f} $out/$(stripHash ${f})
+                    fi
+                  '') (map (f: pkgs.lib.escapeShellArg "${f}") (extraFiles ++ backend.settings.extraFiles or []))}
 
-                runHook postInstall
-              '';
-            };
+                  runHook postInstall
+                '';
+              };
+          };
 
           # Serves a built site
           serveSite = {
@@ -520,7 +544,7 @@
                   '') selectedBackends}
 
                   # Entry point is the default (first) backend, if it produces an executable at all
-                  ${pkgs.lib.optionalString defaultBackend.producesExecutable ''
+                  ${pkgs.lib.optionalString (defaultBackend.kind == "executable") ''
                     ln -s $out/bin/${launcherName pname defaultBackend} $out/bin/${pname}
                   ''}
 
@@ -535,7 +559,7 @@
                     pkgs.lib.concatMapStrings (backend:
                       let
                         # The web backend produces no executable, so its tests run on 'js'
-                        backendForCheck = if backend == effektBackends.js-web then effektBackends.js else backend;
+                        backendForCheck = if backend.kind == "website" then effektBackends.js else backend;
                       in ''
                         echo "Building test ${test} with backend ${backendForCheck.name}"
                         effekt --build --backend ${backendForCheck.name} ${pkgs.lib.escapeShellArgs effektFlags} --out $TMPDIR/testout/${backendForCheck.name} ${src}/${test}
@@ -555,7 +579,7 @@
                 '';
 
                 # Anything the caller passes in 'meta' wins over our 'mainProgram'
-                meta = pkgs.lib.optionalAttrs defaultBackend.producesExecutable {
+                meta = pkgs.lib.optionalAttrs (defaultBackend.kind == "executable") {
                   mainProgram = pname;
                 } // meta;
               });
@@ -683,7 +707,7 @@
 
           # One check per backend that produces an executable
           perBackend = pkgs.lib.mapAttrs (name: _: runCheck name (bs: [bs.${name}]) "Hello from effekt-nix!")
-            (pkgs.lib.filterAttrs (_: b: b.producesExecutable) effektLib.effektBackends);
+            (pkgs.lib.filterAttrs (_: b: b.kind == "executable") effektLib.effektBackends);
 
           # Checks for the primitives ('compile', 'wrap', 'mkSite', 'serveSite')
           compiledFor = backendName: effektLib.compile {
