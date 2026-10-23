@@ -175,6 +175,18 @@
               assert pkgs.lib.assertMsg (selected != []) "At least one backend must be specified";
               selected;
 
+          # Selects a single backend for an Effekt version using the given function, e.g. 'bs: bs.llvm'
+          selectBackend = version: backend:
+            let
+              available = backendsFor version;
+              selected =
+                if builtins.isFunction backend
+                then backend available
+                else throw "A backend must be selected by a function, e.g. 'bs: bs.js' (available backends: ${pkgs.lib.concatStringsSep ", " (builtins.attrNames effektBackends)})";
+            in
+              assert pkgs.lib.assertMsg (builtins.isAttrs selected) "'backend' must select a single backend, e.g. 'bs: bs.js'";
+              available.${selected.name};
+
           # 'makeWrapper' arguments for the environment the selected backends need (see 'compilerEnv')
           mkCompilerEnvArgs = selectedBackends:
             let
@@ -317,32 +329,24 @@
             version ? "0.0.0",
           }:
             let
-              available = backendsFor (effekt.version or latestVersion);
-              requested =
-                if builtins.isFunction backend
-                then backend available
-                else throw "A backend must be selected by a function, e.g. 'bs: bs.js' (available backends: ${pkgs.lib.concatStringsSep ", " (builtins.attrNames effektBackends)})";
-              selected =
-                assert pkgs.lib.assertMsg (builtins.isAttrs requested) "'backend' must select a single backend, e.g. 'bs: bs.js'";
-                available.${requested.name};
+              selectedBackend = selectBackend (effekt.version or latestVersion) backend;
 
-              # '--includes' is repeatable and accumulates; the comma-separated form is rejected
               includeArgs = pkgs.lib.concatMap (i: ["--includes" (toString i)]) (includes ++ effektLibraries);
 
               # Effekt names its output after the entry point: 'src/main.effekt' ~> 'main.js', 'main'
               baseName = pkgs.lib.removeSuffix ".effekt" (baseNameOf main);
             in
             pkgs.stdenv.mkDerivation {
-              pname = if pname != null then pname else "${baseName}-${selected.outputName}";
+              pname = if pname != null then pname else "${baseName}-${selectedBackend.outputName}";
               inherit version src;
 
-              nativeBuildInputs = [effekt] ++ selected.buildInputs;
+              nativeBuildInputs = [effekt] ++ selectedBackend.buildInputs;
               # 'patchShebangs' looks up the launcher's interpreter ('#!/usr/bin/env node') in 'buildInputs' only
-              buildInputs = selected.runtimeInputs;
+              buildInputs = selectedBackend.runtimeInputs;
 
               buildPhase = ''
                 runHook preBuild
-                effekt --${mode} --backend ${selected.name} \
+                effekt --${mode} --backend ${selectedBackend.name} \
                   ${pkgs.lib.escapeShellArgs (includeArgs ++ effektFlags)} \
                   --out $out ${main}
                 runHook postBuild
