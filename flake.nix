@@ -851,20 +851,18 @@
               touch $out
             '';
 
-          # 'minVersion' holds even for a selector that ignores 'bs' and returns a backend directly
+          # A selector that ignores 'bs' still gets the table's own backend, which is where 'minVersion' is enforced
           selector-ignoring-bs =
             let
-              rejected = drv: !(builtins.tryEval drv.drvPath).success;
-              viaGetEffekt = b: effektLib.getEffekt { version = "0.30.0"; backends = _: [b]; };
-              viaCompile = b: effektLib.compile { effektVersion = "0.30.0"; src = ./tests/hello; main = "main.effekt"; backend = _: b; };
+              tampered = effektLib.effektBackends.js // { buildInputs = []; };
+              compiled = backend: effektLib.compile { src = ./tests/hello; main = "main.effekt"; inherit backend; };
             in
-            assert pkgs.lib.assertMsg (!rejected (viaGetEffekt effektLib.effektBackends.js) && !rejected (viaCompile effektLib.effektBackends.js))
-              "'js' on 0.30.0 must evaluate, or the rejections below prove nothing";
-            assert pkgs.lib.assertMsg (rejected (viaGetEffekt effektLib.effektBackends.chez-cps))
-              "'selectBackends' let a selector that ignores 'bs' bypass 'minVersion'";
-            assert pkgs.lib.assertMsg (rejected (viaCompile effektLib.effektBackends.chez-cps))
-              "'selectBackend' let a selector that ignores 'bs' bypass 'minVersion'";
-            pkgs.runCommand "check-selector-ignoring-bs" {} "touch $out";
+            pkgs.linkFarm "check-selector-ignoring-bs" {
+              selectBackends = pkgs.testers.testEqualDerivation "'selectBackends' kept what the selector returned instead of the table's backend"
+                (effektLib.getEffekt { backends = _: [tampered]; }) (effektLib.getEffekt { backends = bs: [bs.js]; });
+              selectBackend = pkgs.testers.testEqualDerivation "'selectBackend' kept what the selector returned instead of the table's backend"
+                (compiled (_: tampered)) (compiled (bs: bs.js));
+            };
         }
       );
     };
