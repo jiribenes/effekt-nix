@@ -355,7 +355,7 @@
               # The compiler creates and fills '$out' itself, so there is nothing left to install
               dontInstall = true;
 
-              passthru = { backend = selected; inherit mode baseName; };
+              passthru = { backend = selectedBackend; inherit mode baseName; };
             };
 
           # Turn compiled artifacts into a runnable program
