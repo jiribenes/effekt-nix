@@ -101,7 +101,7 @@
             js-web = {
               name = "js-web";
               extension = ".js";
-              minVersion = "0.3.0";
+              minVersion = "0.14.0";          # Note: until this version, '--build' exits with 1 after writing the page
               buildInputs = [pkgs.nodejs];    # For tests, we currently use the 'js' backend
               runtimeInputs = [];             # Web output doesn't need runtime deps
               compilerEnv = {};
@@ -401,6 +401,59 @@
               meta.mainProgram = pname;
             };
 
+          # A website backend's output as a publishable site root, of real files: 'serve' answers a symlink with 404
+          mkSite = {
+            pname,
+            version ? "0.0.0",
+            compiled,                   # a derivation produced by 'compile' with a website backend
+            extraFiles ? [],            # project files copied into the site root; later entries win
+          }:
+            let inherit (compiled.passthru) backend artifactName; in
+            assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
+              "mkSite needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
+            assert pkgs.lib.assertMsg (!backend.producesExecutable)
+              "mkSite expects a website backend (e.g. 'js-web') but '${backend.name}' produces an executable ~> use 'wrap'";
+            pkgs.stdenv.mkDerivation {
+              inherit pname version;
+
+              dontUnpack = true;
+              dontFixup = true;
+
+              installPhase = ''
+                runHook preInstall
+
+                mkdir -p $out
+                cp -r --no-preserve=mode ${compiled}/. $out/
+
+                mv $out/${artifactName}.html $out/index.html
+
+                # Add extra files / directories
+                ${pkgs.lib.concatMapStrings (f: ''
+                  if [ -d ${f} ]; then
+                    cp -r --no-preserve=mode ${f}/. $out/
+                  else
+                    cp --no-preserve=mode ${f} $out/
+                  fi
+                '') (map (f: pkgs.lib.escapeShellArg "${f}") extraFiles)}
+
+                runHook postInstall
+              '';
+            };
+
+          # Serves a built site
+          serveSite = {
+            site,                       # a derivation produced by 'mkSite'
+            name ? "serve",
+            listen ? "8080",            # a port, 'tcp://host:port', or 'unix:/path/to.sock'
+          }:
+            pkgs.writeShellApplication {
+              inherit name;
+              runtimeInputs = [pkgs.serve];
+              text = ''
+                exec serve --no-clipboard --listen "${listen}" ${site}
+              '';
+            };
+
           # Builds an Effekt package, can be overriden as `package.override { ... }`
           buildEffektPackage = pkgs.lib.makeOverridable (
             {
@@ -541,7 +594,7 @@
                 };
 
         in {
-          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends availableBackends compile wrap;
+          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends availableBackends compile wrap mkSite serveSite;
         };
     in {
       # Helper functions and types for external use (see 'mkLib')
@@ -630,7 +683,7 @@
           perBackend = pkgs.lib.mapAttrs (name: _: runCheck name (bs: [bs.${name}]) "Hello from effekt-nix!")
             (pkgs.lib.filterAttrs (_: b: b.producesExecutable) effektLib.effektBackends);
 
-          # Checks for the primitives ('compile', 'wrap')
+          # Checks for the primitives ('compile', 'wrap', 'mkSite', 'serveSite')
           compiledFor = backendName: effektLib.compile {
             src = ./tests/hello;
             main = "main.effekt";
@@ -676,6 +729,62 @@
             let failure = pkgs.testers.testBuildFailure (effektLib.compile { src = renamedSrc; main = "my-main.effekt"; backend = bs: bs.js; });
             in pkgs.runCommand "check-compile-module-name-mismatch" {} ''
               grep -q "pass 'moduleName'" ${failure}/testBuildFailure.log
+              touch $out
+            '';
+
+          ## 'compile' and 'mkSite' produce a site root of real files (see 'mkSite')
+          primitiveChecks.mkSite =
+            let site = effektLib.mkSite { pname = "check-site"; compiled = compiledFor "js-web"; }; in
+            pkgs.runCommand "check-mkSite" {} ''
+              test -f ${site}/index.html || { echo "no index.html at the site root"; exit 1; }
+              test -L ${site}/index.html && { echo "index.html is a symlink; sites must be real files"; exit 1; }
+              grep -q 'src="main.js"' ${site}/index.html
+              test -f ${site}/main.js
+              touch $out
+            '';
+
+          ## The page is named after the module too (see 'compile-module-name')
+          primitiveChecks.mkSite-module-name =
+            let site = effektLib.mkSite {
+              pname = "check-site-module-name";
+              compiled = effektLib.compile { src = renamedSrc; main = "my-main.effekt"; moduleName = "renamed"; backend = bs: bs.js-web; };
+            };
+            in pkgs.runCommand "check-mkSite-module-name" {} ''
+              grep -q 'src="renamed.js"' ${site}/index.html
+              test -f ${site}/renamed.js
+              touch $out
+            '';
+
+          ## Serves the page and its assets for real
+          # A socket in the build's own $TMPDIR, not a fixed port, so parallel builds cannot collide.
+          primitiveChecks.serveSite =
+            let
+              site = effektLib.mkSite {
+                pname = "check-served";
+                compiled = compiledFor "js-web";
+                extraFiles = [./tests/hello];        # an asset that must ship alongside the page
+              };
+              server = effektLib.serveSite {
+                inherit site;
+                name = "check-serve";
+                listen = "unix:$SOCKET";
+              };
+            in pkgs.runCommand "check-serveSite" { nativeBuildInputs = [pkgs.curl]; } ''
+              export SOCKET="$(mktemp -u -t effekt-site.XXXXXX.sock)"
+              ${pkgs.lib.getExe server} &
+              trap 'kill %1 2>/dev/null || true' EXIT
+
+              # wait for the socket to appear rather than sleeping a fixed amount
+              for _ in $(seq 1 100); do
+                [ -S "$SOCKET" ] && break
+                sleep 0.1
+              done
+              [ -S "$SOCKET" ] || { echo "server never created $SOCKET"; exit 1; }
+
+              get() { curl -fsS --unix-socket "$SOCKET" -o /dev/null "http://localhost$1"; }
+              get /             || { echo "site root not served"; exit 1; }
+              get /main.js      || { echo "script not served"; exit 1; }
+              get /main.effekt  || { echo "extraFiles not served"; exit 1; }
               touch $out
             '';
 
