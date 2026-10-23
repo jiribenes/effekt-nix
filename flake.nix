@@ -330,6 +330,8 @@
             includes ? [],              # extra import roots, relative to 'src'
             effektLibraries ? [],       # other Effekt libraries; their paths become import roots
             moduleName ? null,          # the entry point's 'module' name, if it differs from its file name
+            nativeBuildInputs ? [],     # the project's build-time tools, besides the backend's
+            buildInputs ? [],           # the project's libraries, besides the backend's runtime
             pname ? null,
             version ? "0.0.0",
           }@args:
@@ -348,9 +350,9 @@
               pname = if pname != null then pname else "${artifactName}-${selectedBackend.name}";
               inherit version src;
 
-              nativeBuildInputs = [effektBuild] ++ selectedBackend.buildInputs;
+              nativeBuildInputs = [effektBuild] ++ selectedBackend.buildInputs ++ nativeBuildInputs;
               # 'patchShebangs' looks up the launcher's interpreter ('#!/usr/bin/env node') in 'buildInputs' only
-              buildInputs = selectedBackend.runtimeInputs;
+              buildInputs = selectedBackend.runtimeInputs ++ buildInputs;
 
               buildPhase = ''
                 runHook preBuild
