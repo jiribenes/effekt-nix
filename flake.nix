@@ -96,7 +96,7 @@
               runtimeInputs = [pkgs.nodejs];  # Needed to run the programs
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              producesExecutable = true;
+              kind = "executable";
             };
             js-web = {
               name = "js-web";
@@ -106,7 +106,7 @@
               runtimeInputs = [];             # Web output doesn't need runtime deps
               compilerEnv = {};
               processOutput = backendUtils.webOutput;
-              producesExecutable = false;     # Produces a '.js'/'.html' pair for the browser
+              kind = "website";               # A '.js'/'.html' pair for the browser
             };
             llvm = {
               name = "llvm";
@@ -119,7 +119,7 @@
                 LIBRARY_PATH = pkgs.lib.makeLibraryPath [pkgs.libuv];
               };
               processOutput = backendUtils.nativeBinary;
-              producesExecutable = true;
+              kind = "executable";
             };
             chez-callcc = {
               name = "chez-callcc";
@@ -129,7 +129,7 @@
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              producesExecutable = true;
+              kind = "executable";
             };
             chez-monadic = {
               name = "chez-monadic";
@@ -139,7 +139,7 @@
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              producesExecutable = true;
+              kind = "executable";
             };
             chez-cps = {
               name = "chez-cps";
@@ -149,7 +149,7 @@
               runtimeInputs = [pkgs.chez];
               compilerEnv = {};
               processOutput = backendUtils.standardBinary;
-              producesExecutable = true;
+              kind = "executable";
             };
           };
 
@@ -378,7 +378,7 @@
             let inherit (compiled.passthru) backend artifactName; in
             assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
               "wrap needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
-            assert pkgs.lib.assertMsg backend.producesExecutable
+            assert pkgs.lib.assertMsg (backend.kind == "executable")
               "the '${backend.name}' backend produces no executable, so 'wrap' does not apply -- use 'mkSite'";
             pkgs.stdenv.mkDerivation {
               inherit pname version;
@@ -413,7 +413,7 @@
             let inherit (compiled.passthru) backend artifactName; in
             assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
               "mkSite needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
-            assert pkgs.lib.assertMsg (!backend.producesExecutable)
+            assert pkgs.lib.assertMsg (backend.kind == "website")
               "mkSite expects a website backend (e.g. 'js-web') but '${backend.name}' produces an executable ~> use 'wrap'";
             pkgs.stdenv.mkDerivation {
               inherit pname version;
@@ -520,7 +520,7 @@
                   '') selectedBackends}
 
                   # Entry point is the default (first) backend, if it produces an executable at all
-                  ${pkgs.lib.optionalString defaultBackend.producesExecutable ''
+                  ${pkgs.lib.optionalString (defaultBackend.kind == "executable") ''
                     ln -s $out/bin/${launcherName pname defaultBackend} $out/bin/${pname}
                   ''}
 
@@ -535,7 +535,7 @@
                     pkgs.lib.concatMapStrings (backend:
                       let
                         # The web backend produces no executable, so its tests run on 'js'
-                        backendForCheck = if backend == effektBackends.js-web then effektBackends.js else backend;
+                        backendForCheck = if backend.kind == "website" then effektBackends.js else backend;
                       in ''
                         echo "Building test ${test} with backend ${backendForCheck.name}"
                         effekt --build --backend ${backendForCheck.name} ${pkgs.lib.escapeShellArgs effektFlags} --out $TMPDIR/testout/${backendForCheck.name} ${src}/${test}
@@ -555,7 +555,7 @@
                 '';
 
                 # Anything the caller passes in 'meta' wins over our 'mainProgram'
-                meta = pkgs.lib.optionalAttrs defaultBackend.producesExecutable {
+                meta = pkgs.lib.optionalAttrs (defaultBackend.kind == "executable") {
                   mainProgram = pname;
                 } // meta;
               });
@@ -683,7 +683,7 @@
 
           # One check per backend that produces an executable
           perBackend = pkgs.lib.mapAttrs (name: _: runCheck name (bs: [bs.${name}]) "Hello from effekt-nix!")
-            (pkgs.lib.filterAttrs (_: b: b.producesExecutable) effektLib.effektBackends);
+            (pkgs.lib.filterAttrs (_: b: b.kind == "executable") effektLib.effektBackends);
 
           # Checks for the primitives ('compile', 'wrap', 'mkSite', 'serveSite')
           compiledFor = backendName: effektLib.compile {
