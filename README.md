@@ -175,7 +175,7 @@ in {
 }
 ```
 
-The result is a site root: `index.html` plus the compiled `.js`, as real files (never symlinks), so it can be uploaded to GitHub Pages as-is:
+The result is a site root: `index.html` plus the compiled `.js`, as real files (never symlinks, which `serve` answers with a 404), and can be uploaded to GitHub Pages as-is:
 
 ```yaml
 - run: nix build .#web

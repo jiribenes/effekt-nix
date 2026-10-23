@@ -409,8 +409,10 @@
             extraFiles ? [],            # project files copied into the site root; later entries win
           }:
             let inherit (compiled.passthru) backend artifactName; in
+            assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
+              "mkSite needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
             assert pkgs.lib.assertMsg (!backend.producesExecutable)
-              "mkSite expects a website backend (e.g. 'js-web'); '${backend.name}' produces an executable -- use 'wrap'";
+              "mkSite expects a website backend (e.g. 'js-web') but '${backend.name}' produces an executable ~> use 'wrap'";
             pkgs.stdenv.mkDerivation {
               inherit pname version;
 
