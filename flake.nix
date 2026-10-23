@@ -369,78 +369,89 @@
             };
 
           # Turn compiled artifacts into a runnable program
-          wrap = {
-            pname,
-            version ? "0.0.0",
-            compiled,                   # a derivation produced by 'compile'
-            makeWrapperArgs ? [],
-          }:
-            let inherit (compiled.passthru) backend artifactName; in
-            assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
-              "wrap needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
-            assert pkgs.lib.assertMsg (backend.kind == "executable")
-              "the '${backend.name}' backend produces no executable, so 'wrap' does not apply -- use 'mkSite'";
-            pkgs.stdenv.mkDerivation {
-              inherit pname version;
+          wrap = pkgs.lib.extendMkDerivation {
+            constructDrv = pkgs.stdenv.mkDerivation;
+            excludeDrvArgNames = ["compiled" "makeWrapperArgs"];
+            extendDrvArgs = finalAttrs: {
+              pname,
+              version ? "0.0.0",
+              compiled,                   # a derivation produced by 'compile'
+              makeWrapperArgs ? [],
+              ...
+            }@args:
+              let inherit (compiled.passthru) backend artifactName; in
+              assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
+                "wrap needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
+              assert pkgs.lib.assertMsg (backend.kind == "executable")
+                "wrap expects a backend that produces an executable (e.g. 'js'), but '${backend.name}' produces a website ~> use 'mkSite'";
+              {
+                inherit pname version;
 
-              dontUnpack = true;
-              nativeBuildInputs = [pkgs.makeWrapper];
+                dontUnpack = true;
+                nativeBuildInputs = (args.nativeBuildInputs or []) ++ [pkgs.makeWrapper];
 
-              installPhase = ''
-                runHook preInstall
+                installPhase = ''
+                  runHook preInstall
 
-                # The launcher reads files next to itself ('require("./main.js")'), so the compiler's output stays together
-                mkdir -p $out/libexec $out/bin
-                cp -r ${compiled} $out/libexec/${pname}
+                  # The launcher reads files next to itself ('require("./main.js")'), so the compiler's output stays together
+                  mkdir -p $out/libexec $out/bin
+                  cp -r ${compiled} $out/libexec/${finalAttrs.pname}
 
-                makeWrapper $out/libexec/${pname}/${artifactName} $out/bin/${pname} \
-                  --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs} \
-                  ${pkgs.lib.escapeShellArgs makeWrapperArgs}
+                  makeWrapper $out/libexec/${finalAttrs.pname}/${artifactName} $out/bin/${finalAttrs.pname} \
+                    --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs} \
+                    ${pkgs.lib.escapeShellArgs makeWrapperArgs}
 
-                runHook postInstall
-              '';
+                  runHook postInstall
+                '';
 
-              meta.mainProgram = pname;
-            };
+                # Anything the caller passes in 'meta' wins over our 'mainProgram'
+                meta = { mainProgram = finalAttrs.pname; } // (args.meta or {});
+              };
+          };
 
           # A website backend's output as a publishable site root, of real files: 'serve' answers a symlink with 404
-          mkSite = {
-            pname,
-            version ? "0.0.0",
-            compiled,                   # a derivation produced by 'compile' with a website backend
-            extraFiles ? [],            # project files copied into the site root; later entries win
-          }:
-            let inherit (compiled.passthru) backend artifactName; in
-            assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
-              "mkSite needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
-            assert pkgs.lib.assertMsg (backend.kind == "website")
-              "mkSite expects a website backend (e.g. 'js-web') but '${backend.name}' produces an executable ~> use 'wrap'";
-            pkgs.stdenv.mkDerivation {
-              inherit pname version;
+          mkSite = pkgs.lib.extendMkDerivation {
+            constructDrv = pkgs.stdenv.mkDerivation;
+            excludeDrvArgNames = ["compiled" "extraFiles"];
+            extendDrvArgs = finalAttrs: {
+              pname,
+              version ? "0.0.0",
+              compiled,                   # a derivation produced by 'compile' with a website backend
+              extraFiles ? [],            # project files copied into the site root; later entries win
+              ...
+            }:
+              let inherit (compiled.passthru) backend artifactName; in
+              assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
+                "mkSite needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
+              assert pkgs.lib.assertMsg (backend.kind == "website")
+                "mkSite expects a website backend (e.g. 'js-web') but '${backend.name}' produces an executable ~> use 'wrap'";
+              {
+                inherit pname version;
 
-              dontUnpack = true;
-              dontFixup = true;
+                dontUnpack = true;
+                dontFixup = true;
 
-              installPhase = ''
-                runHook preInstall
+                installPhase = ''
+                  runHook preInstall
 
-                mkdir -p $out
-                cp -r --no-preserve=mode ${compiled}/. $out/
+                  mkdir -p $out
+                  cp -r --no-preserve=mode ${compiled}/. $out/
 
-                mv $out/${artifactName}.html $out/index.html
+                  mv $out/${artifactName}.html $out/index.html
 
-                # Add extra files / directories
-                ${pkgs.lib.concatMapStrings (f: ''
-                  if [ -d ${f} ]; then
-                    cp -r --no-preserve=mode ${f}/. $out/
-                  else
-                    cp --no-preserve=mode ${f} $out/$(stripHash ${f})
-                  fi
-                '') (map (f: pkgs.lib.escapeShellArg "${f}") extraFiles)}
+                  # Add extra files / directories
+                  ${pkgs.lib.concatMapStrings (f: ''
+                    if [ -d ${f} ]; then
+                      cp -r --no-preserve=mode ${f}/. $out/
+                    else
+                      cp --no-preserve=mode ${f} $out/$(stripHash ${f})
+                    fi
+                  '') (map (f: pkgs.lib.escapeShellArg "${f}") extraFiles)}
 
-                runHook postInstall
-              '';
-            };
+                  runHook postInstall
+                '';
+              };
+          };
 
           # Serves a built site
           serveSite = {
