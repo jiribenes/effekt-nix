@@ -91,6 +91,7 @@
             js = {
               name = "js";
               outputName = "js";
+              extension = ".js";
               minVersion = "0.3.0";           # Note: 0.2.2 works, but its launcher hardcodes an absolute build path
               buildInputs = [pkgs.nodejs];    # Needed for the compiler
               runtimeInputs = [pkgs.nodejs];  # Needed to run the programs
@@ -101,6 +102,7 @@
             js-web = {
               name = "js-web";
               outputName = "js-web";
+              extension = ".js";
               minVersion = "0.3.0";
               buildInputs = [pkgs.nodejs];    # For tests, we currently use the 'js' backend
               runtimeInputs = [];             # Web output doesn't need runtime deps
@@ -111,6 +113,7 @@
             llvm = {
               name = "llvm";
               outputName = "llvm";
+              extension = ".ll";
               minVersion = "0.2.2";
               buildInputs = [clangWithVersionAliases pkgs.llvm pkgs.libuv]; # Supporting older versions of Effekt that used `llc`/`opt`
               runtimeInputs = [pkgs.libuv];                                 # Only libuv needed at runtime
@@ -124,6 +127,7 @@
             chez-callcc = {
               name = "chez-callcc";
               outputName = "chez-callcc";
+              extension = ".ss";
               minVersion = "0.2.2";
               buildInputs = [pkgs.chez];
               runtimeInputs = [pkgs.chez];
@@ -134,6 +138,7 @@
             chez-monadic = {
               name = "chez-monadic";
               outputName = "chez-monadic";
+              extension = ".ss";
               minVersion = "0.2.2";
               buildInputs = [pkgs.chez];
               runtimeInputs = [pkgs.chez];
@@ -144,6 +149,7 @@
             chez-cps = {
               name = "chez-cps";
               outputName = "chez-cps";
+              extension = ".ss";
               minVersion = "0.54.0";
               buildInputs = [pkgs.chez];
               runtimeInputs = [pkgs.chez];
@@ -327,6 +333,7 @@
             effektFlags ? [],
             includes ? [],              # extra import roots, relative to 'src'
             effektLibraries ? [],       # other Effekt libraries; their paths become import roots
+            moduleName ? null,          # the entry point's 'module' name, if it differs from its file name
             pname ? null,
             version ? "0.0.0",
           }@args:
@@ -336,11 +343,13 @@
 
               includeArgs = pkgs.lib.concatMap (i: ["--includes" (toString i)]) (includes ++ effektLibraries);
 
-              # Effekt names its output after the entry point: 'src/main.effekt' ~> 'main.js', 'main'
-              baseName = pkgs.lib.removeSuffix ".effekt" (baseNameOf main);
+              # Effekt names its output after the module path: 
+              # so it's the 'module' declaration, else the file name up to the first '.'
+              modulePath = if moduleName != null then moduleName else builtins.head (pkgs.lib.splitString "." (baseNameOf main));
+              artifactName = builtins.replaceStrings ["-"] ["_"] (pkgs.lib.last (pkgs.lib.splitString "/" modulePath));
             in
             pkgs.stdenv.mkDerivation {
-              pname = if pname != null then pname else "${baseName}-${selectedBackend.outputName}";
+              pname = if pname != null then pname else "${artifactName}-${selectedBackend.outputName}";
               inherit version src;
 
               nativeBuildInputs = [effektBuild] ++ selectedBackend.buildInputs;
@@ -352,13 +361,15 @@
                 effekt --${mode} --backend ${selectedBackend.name} \
                   ${pkgs.lib.escapeShellArgs (includeArgs ++ effektFlags)} \
                   --out $out ${main}
+                [ -f $out/${artifactName}${selectedBackend.extension} ] \
+                  || { echo "effekt-nix: expected '${artifactName}${selectedBackend.extension}' from '${main}'; if it declares another 'module', pass 'moduleName'" >&2; exit 1; }
                 runHook postBuild
               '';
 
               # The compiler creates and fills '$out' itself, so there is nothing left to install
               dontInstall = true;
 
-              passthru = { backend = selectedBackend; inherit mode baseName; };
+              passthru = { backend = selectedBackend; inherit mode artifactName; };
             };
 
           # Turn compiled artifacts into a runnable program
@@ -368,7 +379,7 @@
             compiled,                   # a derivation produced by 'compile'
             makeWrapperArgs ? [],
           }:
-            let inherit (compiled.passthru) backend baseName; in
+            let inherit (compiled.passthru) backend artifactName; in
             assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
               "wrap needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
             assert pkgs.lib.assertMsg backend.producesExecutable
@@ -386,7 +397,7 @@
                 mkdir -p $out/libexec $out/bin
                 cp -r ${compiled} $out/libexec/${pname}
 
-                makeWrapper $out/libexec/${pname}/${baseName} $out/bin/${pname} \
+                makeWrapper $out/libexec/${pname}/${artifactName} $out/bin/${pname} \
                   --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs} \
                   ${pkgs.lib.escapeShellArgs makeWrapperArgs}
 
@@ -637,6 +648,40 @@
             let program = effektLib.wrap { pname = "check-wrap"; compiled = compiledFor "js"; };
             in pkgs.runCommand "check-compile-wrap" {} ''
               ${pkgs.lib.getExe program} | grep -q "Hello from effekt-nix!"
+              touch $out
+            '';
+
+          ## The output is named after the module: '-' becomes '_' ('my-game.effekt' ~> 'my_game')
+          primitiveChecks.wrap-module-name =
+            let program = effektLib.wrap {
+              pname = "check-wrap-module-name";
+              compiled = effektLib.compile {
+                src = pkgs.writeTextDir "my-game.effekt" ''def main() = println("Hello from effekt-nix!")'';
+                main = "my-game.effekt";
+                backend = bs: bs.js;
+              };
+            };
+            in pkgs.runCommand "check-wrap-module-name" {} ''
+              ${pkgs.lib.getExe program} | grep -q "Hello from effekt-nix!"
+              touch $out
+            '';
+
+          ## A 'module' declaration wins over the file name, and needs 'moduleName' (or fails early)
+          renamedSrc = pkgs.writeTextDir "my-main.effekt" ''
+            module renamed
+
+            def main() = println("Hello from effekt-nix!")
+          '';
+          primitiveChecks.compile-module-name =
+            let compiled = effektLib.compile { src = renamedSrc; main = "my-main.effekt"; moduleName = "renamed"; backend = bs: bs.js; };
+            in pkgs.runCommand "check-compile-module-name" {} ''
+              test -f ${compiled}/renamed.js
+              touch $out
+            '';
+          primitiveChecks.compile-module-name-mismatch =
+            let failure = pkgs.testers.testBuildFailure (effektLib.compile { src = renamedSrc; main = "my-main.effekt"; backend = bs: bs.js; });
+            in pkgs.runCommand "check-compile-module-name-mismatch" {} ''
+              grep -q "pass 'moduleName'" ${failure}/testBuildFailure.log
               touch $out
             '';
 

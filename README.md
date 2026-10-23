@@ -159,6 +159,8 @@ an unusual layout or something similar), it can use these primitives directly:
   With `mode = "compile"` it stops at the backend representation (e.g. `main.ll`) instead of building a launcher.
   Takes `effektFlags`, `includes` and `effektLibraries` (all become `--includes`), and `effekt`/`effektVersion`
   like `buildEffektPackage`.
+  Effekt names the output after the entry point's module, so pass `moduleName` if its `module` declaration
+  differs from the file name.
 - `wrap`: turns a compiled entry point into a program: artifacts in `libexec/`, a wrapper in `bin/<pname>`.
 
 ```nix
