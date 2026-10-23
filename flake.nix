@@ -300,6 +300,90 @@
               selectedBackends = selectBackends (effektBuild.version or effektVersion) backends;
             };
 
+          ## Primitives for projects that need more control than 'buildEffektPackage' offers.
+
+          # Compiles a single entry point with a single backend, '$out' being exactly what the compiler emitted.
+          # 'mode = "compile"' stops at the backend representation (e.g. 'main.ll'), "build" adds a launcher.
+          compile = {
+            effekt,                     # the compiler derivation
+            src,                        # the project's source tree
+            main,                       # (relative) path to the entry point
+            backend,                    # single backend: "llvm" or effektBackends.llvm
+            mode ? "build",
+            effektFlags ? [],
+            includes ? [],              # extra import roots, relative to 'src'
+            effektLibraries ? [],       # other Effekt libraries; their paths become import roots
+            pname ? null,
+            version ? "0.0.0",
+          }:
+            let
+              # Through the same gate as 'selectBackends', so an unavailable backend gives our "needs Effekt x.y.z or newer" message, not the compiler's
+              available = backendsFor (effekt.version or latestVersion);
+              selected = available.${if builtins.isString backend then backend else backend.name};
+
+              # '--includes' is repeatable and accumulates; the comma-separated form is rejected
+              includeArgs = pkgs.lib.concatMap (i: ["--includes" (toString i)]) (includes ++ effektLibraries);
+
+              # Effekt names its output after the entry point: 'src/main.effekt' ~> 'main.js', 'main'
+              baseName = pkgs.lib.removeSuffix ".effekt" (baseNameOf main);
+            in
+            pkgs.stdenv.mkDerivation {
+              pname = if pname != null then pname else "${baseName}-${selected.outputName}";
+              inherit version src;
+
+              nativeBuildInputs = [effekt] ++ selected.buildInputs;
+              # 'patchShebangs' looks up the launcher's interpreter ('#!/usr/bin/env node') in 'buildInputs' only
+              buildInputs = selected.runtimeInputs;
+
+              buildPhase = ''
+                runHook preBuild
+                effekt --${mode} --backend ${selected.name} \
+                  ${pkgs.lib.escapeShellArgs (includeArgs ++ effektFlags)} \
+                  --out $out ${main}
+                runHook postBuild
+              '';
+
+              # The compiler creates and fills '$out' itself, so there is nothing left to install
+              dontInstall = true;
+
+              passthru = { backend = selected; inherit mode baseName; };
+            };
+
+          # Turn compiled artifacts into a runnable program
+          wrap = {
+            pname,
+            version ? "0.0.0",
+            compiled,                   # a derivation produced by 'compile'
+            makeWrapperArgs ? [],
+          }:
+            let inherit (compiled.passthru) backend baseName; in
+            assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
+              "wrap needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
+            assert pkgs.lib.assertMsg backend.producesExecutable
+              "the '${backend.name}' backend produces no executable, so 'wrap' does not apply -- use 'mkSite'";
+            pkgs.stdenv.mkDerivation {
+              inherit pname version;
+
+              dontUnpack = true;
+              nativeBuildInputs = [pkgs.makeWrapper];
+
+              installPhase = ''
+                runHook preInstall
+
+                # The launcher reads files next to itself ('require("./main.js")'), so the compiler's output stays together
+                mkdir -p $out/libexec $out/bin
+                cp -r ${compiled} $out/libexec/${pname}
+
+                makeWrapper $out/libexec/${pname}/${baseName} $out/bin/${pname} \
+                  --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs} \
+                  ${pkgs.lib.escapeShellArgs makeWrapperArgs}
+
+                runHook postInstall
+              '';
+
+              meta.mainProgram = pname;
+            };
+
           # Builds an Effekt package, can be overriden as `package.override { ... }`
           buildEffektPackage = pkgs.lib.makeOverridable (
             {
@@ -440,7 +524,7 @@
                 };
 
         in {
-          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends availableBackends;
+          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends availableBackends compile wrap;
         };
     in {
       # Helper functions and types for external use (see 'mkLib')
@@ -529,6 +613,22 @@
           perBackend = pkgs.lib.mapAttrs (name: _: runCheck name (_: [effektLib.effektBackends.${name}]) "Hello from effekt-nix!")
             (pkgs.lib.filterAttrs (_: b: b.producesExecutable) effektLib.effektBackends);
 
+          # Checks for the primitives ('compile', 'wrap')
+          compiledFor = backend: effektLib.compile {
+            effekt = effektLib.getEffekt { backends = bs: [bs.${backend}]; };
+            src = ./tests/hello;
+            main = "main.effekt";
+            inherit backend;
+          };
+
+          ## 'compile' and 'wrap' produce a runnable program
+          primitiveChecks.compile-wrap =
+            let program = effektLib.wrap { pname = "check-wrap"; compiled = compiledFor "js"; };
+            in pkgs.runCommand "check-compile-wrap" {} ''
+              ${pkgs.lib.getExe program} | grep -q "Hello from effekt-nix!"
+              touch $out
+            '';
+
           checkedVersions = ["0.2.2" "0.3.0" "0.12.0" "0.22.0" "0.32.0" "0.41.0" "0.51.0" "0.54.0" "0.61.0" "0.71.0" latestVersion];
 
           # Builds and runs the fixture with one backend on one Effekt version
@@ -559,7 +659,7 @@
             ) (backendsToCheck version)
           ) checkedVersions);
         in
-        perBackend // versionChecks // {
+        perBackend // versionChecks // primitiveChecks // {
           # Two backends whose artifacts used to overwrite each other in a shared output directory.
           both-chez = runCheck "both-chez" (bs: [bs.chez-callcc bs.chez-monadic]) "Hello from effekt-nix!";
 

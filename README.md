@@ -150,6 +150,27 @@ their artifacts live in `libexec/${pname}/${backend}/`, except for `js-web`, who
 `effekt-nix` also supports multiple platforms (see `effekt-nix.lib.supportedSystems`). Use `nixpkgs.lib.genAttrs effekt-nix.lib.supportedSystems` (like the [template](https://github.com/jiribenes/effekt-template/blob/main/flake.nix))
 to define outputs for multiple systems at the same time.
 
+### Lower-level building blocks
+
+When a project needs more control than `buildEffektPackage` offers (being a bootloader image, a custom link step,
+an unusual layout or something similar), it can use these primitives directly:
+
+- `compile`: compiles a single entry point on a single backend. `$out` is exactly what the Effekt compiler emitted.
+  With `mode = "compile"` it stops at the backend representation (e.g. `main.ll`) instead of building a launcher.
+  Takes `effektFlags`, `includes` and `effektLibraries` (all become `--includes`).
+- `wrap`: turns a compiled entry point into a program — artifacts in `libexec/`, a wrapper in `bin/<pname>`.
+
+```nix
+# example: :compile to LLVM IR and link it yourself
+compiled = effekt-lib.compile {
+  effekt = effekt-lib.getEffekt { backends = bs: [ bs.llvm ]; };
+  src = ./.; main = "src/main.effekt"; backend = "llvm"; mode = "compile";
+  effektFlags = [ "--optimize" ];
+  includes = [ "src/" "lib/" ];
+};
+# ${compiled}/main.ll is then an ordinary input to any other derivation
+```
+
 ### Using a custom Effekt compiler build for your app
 
 ```nix
