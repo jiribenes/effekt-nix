@@ -190,12 +190,16 @@ an unusual layout or something similar), it can use these primitives directly:
 
 - `compile`: compiles a single entry point on a single backend. `$out` is exactly what the Effekt compiler emitted.
   With `mode = "compile"` it stops at the backend representation (e.g. `main.ll`) instead of building a launcher.
-  Takes `effektFlags`, `includes` and `effektLibraries` (all become `--includes`), and `effekt`/`effektVersion`
-  like `buildEffektPackage`.
+  Takes `effektFlags`, `includes` and `effektLibraries` (all become `--includes`), `nativeBuildInputs`/`buildInputs`,
+  and `effekt`/`effektVersion` like `buildEffektPackage`.
   Effekt names the output after the entry point's module, so pass `moduleName` if its `module` declaration
   differs from the file name.
 - `wrap`: turns a compiled entry point into a program: artifacts in `libexec/`, a wrapper in `bin/<pname>`.
 - `mkSite` / `serveSite`: as above, for website backends.
+
+`wrap` and `mkSite` also take the usual `mkDerivation` arguments (`postInstall`, `meta`, ...).
+A backend can carry its own settings, for example `bs.llvm.override { effektFlags = [ "--optimize" ]; }`
+(`effektFlags`, `makeWrapperArgs` or `extraFiles`), whereas `buildEffektPackage` ignores them (for now).
 
 ```nix
 # example: :compile to LLVM IR and link it yourself
