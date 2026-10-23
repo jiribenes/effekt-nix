@@ -343,7 +343,7 @@
 
               includeArgs = pkgs.lib.concatMap (i: ["--includes" (toString i)]) (includes ++ effektLibraries);
 
-              # Effekt names its output after the module path: 
+              # Effekt names its output after the module path:
               # so it's the 'module' declaration, else the file name up to the first '.'
               modulePath = if moduleName != null then moduleName else builtins.head (pkgs.lib.splitString "." (baseNameOf main));
               artifactName = builtins.replaceStrings ["-"] ["_"] (pkgs.lib.last (pkgs.lib.splitString "/" modulePath));
