@@ -167,13 +167,15 @@
           # Selects backends for an Effekt version using the given function, e.g. 'bs: [bs.js bs.llvm]'
           selectBackends = version: backends:
             let
+              available = backendsFor version;
               selected =
                 if builtins.isFunction backends
-                then backends (backendsFor version)
+                then backends available
                 else throw "Backends must be selected by a function, e.g. 'bs: [bs.js]' (available backends: ${pkgs.lib.concatStringsSep ", " (builtins.attrNames effektBackends)})";
             in
+              assert pkgs.lib.assertMsg (builtins.isList selected && builtins.all builtins.isAttrs selected) "'backends' must select a list of backends, e.g. 'bs: [bs.js]'";
               assert pkgs.lib.assertMsg (selected != []) "At least one backend must be specified";
-              selected;
+              map (b: available.${b.name}) selected;
 
           # Selects a single backend for an Effekt version using the given function, e.g. 'bs: bs.llvm'
           selectBackend = version: backend:
@@ -848,6 +850,20 @@
               grep -q "postBuild ran" ${package}/libexec/check-hooks/js/hook-marker.txt
               touch $out
             '';
+
+          # 'minVersion' holds even for a selector that ignores 'bs' and returns a backend directly
+          selector-ignoring-bs =
+            let rejected = drv: !(builtins.tryEval drv.drvPath).success; in
+            assert pkgs.lib.assertMsg (rejected (effektLib.getEffekt { version = "0.30.0"; backends = _: [effektLib.effektBackends.chez-cps]; }))
+              "'selectBackends' let a selector that ignores 'bs' bypass 'minVersion'";
+            assert pkgs.lib.assertMsg (rejected (effektLib.compile {
+                effektVersion = "0.30.0";
+                src = ./tests/hello;
+                main = "main.effekt";
+                backend = _: effektLib.effektBackends.chez-cps;
+              }))
+              "'selectBackend' let a selector that ignores 'bs' bypass 'minVersion'";
+            pkgs.runCommand "check-selector-ignoring-bs" {} "touch $out";
         }
       );
     };
