@@ -317,7 +317,9 @@
           # Compiles a single entry point with a single backend, '$out' being exactly what the compiler emitted.
           # 'mode = "compile"' stops at the backend representation (e.g. 'main.ll'), "build" adds a launcher.
           compile = {
-            effekt,                     # the compiler derivation
+            effekt ? null,              # the explicit Effekt derivation to use: uses latest release if not set
+            effektVersion ? latestVersion,
+            jvmArgs ? ["-Xss32m"],      # JVM arguments for the compiler
             src,                        # the project's source tree
             main,                       # (relative) path to the entry point
             backend,                    # selects a single backend, e.g. 'bs: bs.llvm'
@@ -327,9 +329,10 @@
             effektLibraries ? [],       # other Effekt libraries; their paths become import roots
             pname ? null,
             version ? "0.0.0",
-          }:
+          }@args:
             let
-              selectedBackend = selectBackend (effekt.version or latestVersion) backend;
+              inherit (resolveEffekt args) effektBuild;
+              selectedBackend = selectBackend (effektBuild.version or effektVersion) backend;
 
               includeArgs = pkgs.lib.concatMap (i: ["--includes" (toString i)]) (includes ++ effektLibraries);
 
@@ -340,7 +343,7 @@
               pname = if pname != null then pname else "${baseName}-${selectedBackend.outputName}";
               inherit version src;
 
-              nativeBuildInputs = [effekt] ++ selectedBackend.buildInputs;
+              nativeBuildInputs = [effektBuild] ++ selectedBackend.buildInputs;
               # 'patchShebangs' looks up the launcher's interpreter ('#!/usr/bin/env node') in 'buildInputs' only
               buildInputs = selectedBackend.runtimeInputs;
 
@@ -624,7 +627,6 @@
 
           # Checks for the primitives ('compile', 'wrap')
           compiledFor = backendName: effektLib.compile {
-            effekt = effektLib.getEffekt { backends = bs: [bs.${backendName}]; };
             src = ./tests/hello;
             main = "main.effekt";
             backend = bs: bs.${backendName};

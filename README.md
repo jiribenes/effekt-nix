@@ -157,13 +157,13 @@ an unusual layout or something similar), it can use these primitives directly:
 
 - `compile`: compiles a single entry point on a single backend. `$out` is exactly what the Effekt compiler emitted.
   With `mode = "compile"` it stops at the backend representation (e.g. `main.ll`) instead of building a launcher.
-  Takes `effektFlags`, `includes` and `effektLibraries` (all become `--includes`).
-- `wrap`: turns a compiled entry point into a program — artifacts in `libexec/`, a wrapper in `bin/<pname>`.
+  Takes `effektFlags`, `includes` and `effektLibraries` (all become `--includes`), and `effekt`/`effektVersion`
+  like `buildEffektPackage`.
+- `wrap`: turns a compiled entry point into a program: artifacts in `libexec/`, a wrapper in `bin/<pname>`.
 
 ```nix
 # example: :compile to LLVM IR and link it yourself
 compiled = effekt-lib.compile {
-  effekt = effekt-lib.getEffekt { backends = bs: [ bs.llvm ]; };
   src = ./.; main = "src/main.effekt"; backend = bs: bs.llvm; mode = "compile";
   effektFlags = [ "--optimize" ];
   includes = [ "src/" "lib/" ];
