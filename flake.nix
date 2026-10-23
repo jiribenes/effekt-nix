@@ -853,15 +853,16 @@
 
           # 'minVersion' holds even for a selector that ignores 'bs' and returns a backend directly
           selector-ignoring-bs =
-            let rejected = drv: !(builtins.tryEval drv.drvPath).success; in
-            assert pkgs.lib.assertMsg (rejected (effektLib.getEffekt { version = "0.30.0"; backends = _: [effektLib.effektBackends.chez-cps]; }))
+            let
+              rejected = drv: !(builtins.tryEval drv.drvPath).success;
+              viaGetEffekt = b: effektLib.getEffekt { version = "0.30.0"; backends = _: [b]; };
+              viaCompile = b: effektLib.compile { effektVersion = "0.30.0"; src = ./tests/hello; main = "main.effekt"; backend = _: b; };
+            in
+            assert pkgs.lib.assertMsg (!rejected (viaGetEffekt effektLib.effektBackends.js) && !rejected (viaCompile effektLib.effektBackends.js))
+              "'js' on 0.30.0 must evaluate, or the rejections below prove nothing";
+            assert pkgs.lib.assertMsg (rejected (viaGetEffekt effektLib.effektBackends.chez-cps))
               "'selectBackends' let a selector that ignores 'bs' bypass 'minVersion'";
-            assert pkgs.lib.assertMsg (rejected (effektLib.compile {
-                effektVersion = "0.30.0";
-                src = ./tests/hello;
-                main = "main.effekt";
-                backend = _: effektLib.effektBackends.chez-cps;
-              }))
+            assert pkgs.lib.assertMsg (rejected (viaCompile effektLib.effektBackends.chez-cps))
               "'selectBackend' let a selector that ignores 'bs' bypass 'minVersion'";
             pkgs.runCommand "check-selector-ignoring-bs" {} "touch $out";
         }
