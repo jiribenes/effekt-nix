@@ -434,7 +434,7 @@
                   if [ -d ${f} ]; then
                     cp -r --no-preserve=mode ${f}/. $out/
                   else
-                    cp --no-preserve=mode ${f} $out/
+                    cp --no-preserve=mode ${f} $out/$(stripHash ${f})
                   fi
                 '') (map (f: pkgs.lib.escapeShellArg "${f}") extraFiles)}
 
