@@ -167,13 +167,15 @@
           # Selects backends for an Effekt version using the given function, e.g. 'bs: [bs.js bs.llvm]'
           selectBackends = version: backends:
             let
+              available = backendsFor version;
               selected =
                 if builtins.isFunction backends
-                then backends (backendsFor version)
+                then backends available
                 else throw "Backends must be selected by a function, e.g. 'bs: [bs.js]' (available backends: ${pkgs.lib.concatStringsSep ", " (builtins.attrNames effektBackends)})";
             in
+              assert pkgs.lib.assertMsg (builtins.isList selected && builtins.all builtins.isAttrs selected) "'backends' must select a list of backends, e.g. 'bs: [bs.js]'";
               assert pkgs.lib.assertMsg (selected != []) "At least one backend must be specified";
-              selected;
+              map (b: available.${b.name}) selected;
 
           # Selects a single backend for an Effekt version using the given function, e.g. 'bs: bs.llvm'
           selectBackend = version: backend:
@@ -848,6 +850,19 @@
               grep -q "postBuild ran" ${package}/libexec/check-hooks/js/hook-marker.txt
               touch $out
             '';
+
+          # A selector that ignores 'bs' still gets the table's own backend, which is where 'minVersion' is enforced
+          selector-ignoring-bs =
+            let
+              tampered = effektLib.effektBackends.js // { buildInputs = []; };
+              compiled = backend: effektLib.compile { src = ./tests/hello; main = "main.effekt"; inherit backend; };
+            in
+            pkgs.linkFarm "check-selector-ignoring-bs" {
+              selectBackends = pkgs.testers.testEqualDerivation "'selectBackends' kept what the selector returned instead of the table's backend"
+                (effektLib.getEffekt { backends = _: [tampered]; }) (effektLib.getEffekt { backends = bs: [bs.js]; });
+              selectBackend = pkgs.testers.testEqualDerivation "'selectBackend' kept what the selector returned instead of the table's backend"
+                (compiled (_: tampered)) (compiled (bs: bs.js));
+            };
         }
       );
     };
