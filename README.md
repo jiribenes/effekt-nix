@@ -150,6 +150,39 @@ their artifacts live in `libexec/${pname}/${backend}/`, except for `js-web`, who
 `effekt-nix` also supports multiple platforms (see `effekt-nix.lib.supportedSystems`). Use `nixpkgs.lib.genAttrs effekt-nix.lib.supportedSystems` (like the [template](https://github.com/jiribenes/effekt-template/blob/main/flake.nix))
 to define outputs for multiple systems at the same time.
 
+### Building a website (the `js-web` backend)
+
+The `js-web` backend produces a page instead of an executable, so it is built with `mkSite` rather than with `buildEffektPackage`:
+
+```nix
+let
+  effekt-lib = effekt-nix.lib.mkLib pkgs;
+
+  site = effekt-lib.mkSite {
+    pname = "my-game";
+    compiled = effekt-lib.compile {
+      src = ./.;
+      main = "src/main.effekt";
+      backend = bs: bs.js-web;
+    };
+    extraFiles = [ ./public ]; # assets
+  };
+in {
+  packages.${system}.web = site;
+
+  # use with 'nix run .#serve' for a preview
+  packages.${system}.serve = effekt-lib.serveSite { inherit site; };
+}
+```
+
+The result is a site root: `index.html` plus the compiled `.js`, as real files (never symlinks), so it can be uploaded to GitHub Pages as-is:
+
+```yaml
+- run: nix build .#web
+- uses: actions/upload-pages-artifact@v5
+  with: { path: result }
+```
+
 ### Lower-level building blocks
 
 When a project needs more control than `buildEffektPackage` offers (being a bootloader image, a custom link step,
@@ -162,6 +195,7 @@ an unusual layout or something similar), it can use these primitives directly:
   Effekt names the output after the entry point's module, so pass `moduleName` if its `module` declaration
   differs from the file name.
 - `wrap`: turns a compiled entry point into a program: artifacts in `libexec/`, a wrapper in `bin/<pname>`.
+- `mkSite` / `serveSite`: as above, for website backends.
 
 ```nix
 # example: :compile to LLVM IR and link it yourself
