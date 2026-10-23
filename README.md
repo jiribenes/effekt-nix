@@ -164,7 +164,7 @@ an unusual layout or something similar), it can use these primitives directly:
 # example: :compile to LLVM IR and link it yourself
 compiled = effekt-lib.compile {
   effekt = effekt-lib.getEffekt { backends = bs: [ bs.llvm ]; };
-  src = ./.; main = "src/main.effekt"; backend = "llvm"; mode = "compile";
+  src = ./.; main = "src/main.effekt"; backend = bs: bs.llvm; mode = "compile";
   effektFlags = [ "--optimize" ];
   includes = [ "src/" "lib/" ];
 };

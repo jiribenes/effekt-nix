@@ -308,7 +308,7 @@
             effekt,                     # the compiler derivation
             src,                        # the project's source tree
             main,                       # (relative) path to the entry point
-            backend,                    # single backend: "llvm" or effektBackends.llvm
+            backend,                    # selects a single backend, e.g. 'bs: bs.llvm'
             mode ? "build",
             effektFlags ? [],
             includes ? [],              # extra import roots, relative to 'src'
@@ -317,9 +317,14 @@
             version ? "0.0.0",
           }:
             let
-              # Through the same gate as 'selectBackends', so an unavailable backend gives our "needs Effekt x.y.z or newer" message, not the compiler's
               available = backendsFor (effekt.version or latestVersion);
-              selected = available.${if builtins.isString backend then backend else backend.name};
+              requested =
+                if builtins.isFunction backend
+                then backend available
+                else throw "A backend must be selected by a function, e.g. 'bs: bs.js' (available backends: ${pkgs.lib.concatStringsSep ", " (builtins.attrNames effektBackends)})";
+              selected =
+                assert pkgs.lib.assertMsg (builtins.isAttrs requested) "'backend' must select a single backend, e.g. 'bs: bs.js'";
+                available.${requested.name};
 
               # '--includes' is repeatable and accumulates; the comma-separated form is rejected
               includeArgs = pkgs.lib.concatMap (i: ["--includes" (toString i)]) (includes ++ effektLibraries);
@@ -610,15 +615,15 @@
             '';
 
           # One check per backend that produces an executable
-          perBackend = pkgs.lib.mapAttrs (name: _: runCheck name (_: [effektLib.effektBackends.${name}]) "Hello from effekt-nix!")
+          perBackend = pkgs.lib.mapAttrs (name: _: runCheck name (bs: [bs.${name}]) "Hello from effekt-nix!")
             (pkgs.lib.filterAttrs (_: b: b.producesExecutable) effektLib.effektBackends);
 
           # Checks for the primitives ('compile', 'wrap')
-          compiledFor = backend: effektLib.compile {
-            effekt = effektLib.getEffekt { backends = bs: [bs.${backend}]; };
+          compiledFor = backendName: effektLib.compile {
+            effekt = effektLib.getEffekt { backends = bs: [bs.${backendName}]; };
             src = ./tests/hello;
             main = "main.effekt";
-            inherit backend;
+            backend = bs: bs.${backendName};
           };
 
           ## 'compile' and 'wrap' produce a runnable program
