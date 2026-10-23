@@ -153,10 +153,21 @@
             };
           };
 
+          # A backend with per-project settings, e.g. 'bs.llvm.override { effektFlags = ["--optimize"]; }'; chainable
+          settableKeys = ["effektFlags" "makeWrapperArgs" "extraFiles"];
+          withSettings = backend: settings:
+            let unknown = builtins.filter (key: !(builtins.elem key settableKeys)) (builtins.attrNames settings); in
+            assert pkgs.lib.assertMsg (unknown == [])
+              "unknown setting(s) ${pkgs.lib.concatStringsSep ", " unknown} for backend '${backend.name}' (settable: ${pkgs.lib.concatStringsSep ", " settableKeys})";
+            backend // {
+              inherit settings;
+              override = more: withSettings backend (settings // more);
+            };
+
           # The backends an Effekt version actually supports
           backendsFor = version: pkgs.lib.mapAttrs (name: backend:
             if pkgs.lib.versionAtLeast version backend.minVersion
-            then backend
+            then withSettings backend {}
             else throw "The '${name}' backend needs Effekt ${backend.minVersion} or newer (selected: ${version})"
           ) effektBackends;
 
@@ -175,7 +186,7 @@
             in
               assert pkgs.lib.assertMsg (builtins.isList selected && builtins.all builtins.isAttrs selected) "'backends' must select a list of backends, e.g. 'bs: [bs.js]'";
               assert pkgs.lib.assertMsg (selected != []) "At least one backend must be specified";
-              map (b: available.${b.name}) selected;
+              map (b: available.${b.name}.override (b.settings or {})) selected;
 
           # Selects a single backend for an Effekt version using the given function, e.g. 'bs: bs.llvm'
           selectBackend = version: backend:
@@ -187,7 +198,7 @@
                 else throw "A backend must be selected by a function, e.g. 'bs: bs.js' (available backends: ${pkgs.lib.concatStringsSep ", " (builtins.attrNames effektBackends)})";
             in
               assert pkgs.lib.assertMsg (builtins.isAttrs selected) "'backend' must select a single backend, e.g. 'bs: bs.js'";
-              available.${selected.name};
+              available.${selected.name}.override (selected.settings or {});
 
           # 'makeWrapper' arguments for the environment the selected backends need (see 'compilerEnv')
           mkCompilerEnvArgs = selectedBackends:
@@ -357,7 +368,7 @@
               buildPhase = ''
                 runHook preBuild
                 effekt --${mode} --backend ${selectedBackend.name} \
-                  ${pkgs.lib.escapeShellArgs (includeArgs ++ effektFlags)} \
+                  ${pkgs.lib.escapeShellArgs (includeArgs ++ effektFlags ++ selectedBackend.settings.effektFlags or [])} \
                   --out $out ${main}
                 [ -f $out/${artifactName}${selectedBackend.extension} ] \
                   || { echo "effekt-nix: expected '${artifactName}${selectedBackend.extension}' from '${main}'; if it declares another 'module', pass 'moduleName'" >&2; exit 1; }
@@ -401,7 +412,7 @@
 
                   makeWrapper $out/libexec/${finalAttrs.pname}/${artifactName} $out/bin/${finalAttrs.pname} \
                     --prefix PATH : ${pkgs.lib.makeBinPath backend.runtimeInputs} \
-                    ${pkgs.lib.escapeShellArgs makeWrapperArgs}
+                    ${pkgs.lib.escapeShellArgs (makeWrapperArgs ++ backend.settings.makeWrapperArgs or [])}
 
                   runHook postInstall
                 '';
@@ -448,7 +459,7 @@
                     else
                       cp --no-preserve=mode ${f} $out/$(stripHash ${f})
                     fi
-                  '') (map (f: pkgs.lib.escapeShellArg "${f}") extraFiles)}
+                  '') (map (f: pkgs.lib.escapeShellArg "${f}") (extraFiles ++ backend.settings.extraFiles or []))}
 
                   runHook postInstall
                 '';
