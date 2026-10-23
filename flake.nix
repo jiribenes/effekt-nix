@@ -37,8 +37,8 @@
       mkLib = pkgs:
         let
           # Where a backend's launcher and artifacts live, defining the layout
-          launcherName = pname: backend: "${pname}-${backend.outputName}";
-          backendDir = pname: backend: "$out/libexec/${pname}/${backend.outputName}";
+          launcherName = pname: backend: "${pname}-${backend.name}";
+          backendDir = pname: backend: "$out/libexec/${pname}/${backend.name}";
           launcherPath = pname: backend: "${backendDir pname backend}/${launcherName pname backend}";
 
           # Wraps a backend's launcher into '$out/bin/<pname>-<backend>' with its runtime dependencies
@@ -90,7 +90,6 @@
           effektBackends = {
             js = {
               name = "js";
-              outputName = "js";
               extension = ".js";
               minVersion = "0.3.0";           # Note: 0.2.2 works, but its launcher hardcodes an absolute build path
               buildInputs = [pkgs.nodejs];    # Needed for the compiler
@@ -101,7 +100,6 @@
             };
             js-web = {
               name = "js-web";
-              outputName = "js-web";
               extension = ".js";
               minVersion = "0.3.0";
               buildInputs = [pkgs.nodejs];    # For tests, we currently use the 'js' backend
@@ -112,7 +110,6 @@
             };
             llvm = {
               name = "llvm";
-              outputName = "llvm";
               extension = ".ll";
               minVersion = "0.2.2";
               buildInputs = [clangWithVersionAliases pkgs.llvm pkgs.libuv]; # Supporting older versions of Effekt that used `llc`/`opt`
@@ -126,7 +123,6 @@
             };
             chez-callcc = {
               name = "chez-callcc";
-              outputName = "chez-callcc";
               extension = ".ss";
               minVersion = "0.2.2";
               buildInputs = [pkgs.chez];
@@ -137,7 +133,6 @@
             };
             chez-monadic = {
               name = "chez-monadic";
-              outputName = "chez-monadic";
               extension = ".ss";
               minVersion = "0.2.2";
               buildInputs = [pkgs.chez];
@@ -148,7 +143,6 @@
             };
             chez-cps = {
               name = "chez-cps";
-              outputName = "chez-cps";
               extension = ".ss";
               minVersion = "0.54.0";
               buildInputs = [pkgs.chez];
@@ -349,7 +343,7 @@
               artifactName = builtins.replaceStrings ["-"] ["_"] (pkgs.lib.last (pkgs.lib.splitString "/" modulePath));
             in
             pkgs.stdenv.mkDerivation {
-              pname = if pname != null then pname else "${artifactName}-${selectedBackend.outputName}";
+              pname = if pname != null then pname else "${artifactName}-${selectedBackend.name}";
               inherit version src;
 
               nativeBuildInputs = [effektBuild] ++ selectedBackend.buildInputs;
@@ -453,7 +447,7 @@
 
                   ${pkgs.lib.concatMapStrings (backend: ''
                     echo "Building with backend ${backend.name} file ${src}/${main}"
-                    effekt --build --backend ${backend.name} ${pkgs.lib.escapeShellArgs effektFlags} --out build/${backend.outputName} ${src}/${main}
+                    effekt --build --backend ${backend.name} ${pkgs.lib.escapeShellArgs effektFlags} --out build/${backend.name} ${src}/${main}
                   '') selectedBackends}
 
                   runHook postBuild
@@ -466,7 +460,7 @@
 
                   # Each backend installs its own artifacts, from inside its build directory
                   ${pkgs.lib.concatMapStrings (backend: ''
-                    ( cd build/${backend.outputName}
+                    ( cd build/${backend.name}
                       ${backend.processOutput pname backend "${src}/${main}"} )
                   '') selectedBackends}
 
@@ -489,15 +483,15 @@
                         backendForCheck = if backend == effektBackends.js-web then effektBackends.js else backend;
                       in ''
                         echo "Building test ${test} with backend ${backendForCheck.name}"
-                        effekt --build --backend ${backendForCheck.name} ${pkgs.lib.escapeShellArgs effektFlags} --out $TMPDIR/testout/${backendForCheck.outputName} ${src}/${test}
+                        effekt --build --backend ${backendForCheck.name} ${pkgs.lib.escapeShellArgs effektFlags} --out $TMPDIR/testout/${backendForCheck.name} ${src}/${test}
 
-                        patchShebangs $TMPDIR/testout/${backendForCheck.outputName}
+                        patchShebangs $TMPDIR/testout/${backendForCheck.name}
 
                         echo "Running the test:"
                         ( export PATH=${pkgs.lib.makeBinPath backendForCheck.runtimeInputs}''${PATH:+:}$PATH
-                          $TMPDIR/testout/${backendForCheck.outputName}/$(basename ${test} .effekt) )
+                          $TMPDIR/testout/${backendForCheck.name}/$(basename ${test} .effekt) )
 
-                        rm -rf $TMPDIR/testout/${backendForCheck.outputName}
+                        rm -rf $TMPDIR/testout/${backendForCheck.name}
                       ''
                     ) selectedBackends
                   ) tests}
