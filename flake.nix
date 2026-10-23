@@ -101,7 +101,7 @@
             js-web = {
               name = "js-web";
               extension = ".js";
-              minVersion = "0.3.0";
+              minVersion = "0.14.0";          # Note: until this version, '--build' exits with 1 after writing the page
               buildInputs = [pkgs.nodejs];    # For tests, we currently use the 'js' backend
               runtimeInputs = [];             # Web output doesn't need runtime deps
               compilerEnv = {};
