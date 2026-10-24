@@ -487,42 +487,48 @@
                 executables = builtins.filter (b: b.kind == "executable") selectedBackends;
                 backend = builtins.head (if executables != [] then executables else selectedBackends);
 
+                # Prepare the "final" source here by applying patches onto `src`
                 preparedSrc =
                   if patches == [] && postPatch == "" then src
                   else pkgs.applyPatches { name = "${pname}-${version}-source"; inherit src patches postPatch nativeBuildInputs; };
 
-                compileWith = b: entry: extra: compile ({
+                compileWith = finalAttrs: b: entry: extra: compile ({
                   effekt = effektBuild;
-                  src = preparedSrc;
+                  src = assert pkgs.lib.assertMsg (pkgs.lib.all (attr: !(finalAttrs ? ${attr})) ["prePatch" "patches" "postPatch"])
+                    "${pname}: the source is prepared once, before any Effekt build: pass 'patches'/'postPatch' to 'buildEffektPackage' (or 'package.override'), not to the package's derivation";
+                    finalAttrs.src;
                   main = entry;
                   backend = bs: bs.${b.name}.override (b.settings or {});
-                  inherit effektFlags nativeBuildInputs buildInputs preBuild postBuild;
+                  inherit effektFlags;
+                  nativeBuildInputs = finalAttrs.nativeBuildInputs or [];
+                  buildInputs = finalAttrs.buildInputs or [];
+                  preBuild = finalAttrs.preBuild or null;
+                  postBuild = finalAttrs.postBuild or null;
                 } // extra);
 
                 # A test is a program: built like the package, run by its 'checkPhase',
                 # an exception being that a website's tests run on 'js'.
                 testBackend = if backend.kind == "executable" then backend else selectBackend (effektBuild.version or effektVersion) (bs: bs.js);
-                testPrograms = map (test: wrap {
-                  pname = "${pname}-test-${builtins.replaceStrings ["/"] ["-"] (pkgs.lib.removeSuffix ".effekt" test)}";
-                  inherit version;
-                  compiled = compileWith testBackend test {};
+                testName = test: "${pname}-test-${builtins.replaceStrings ["/"] ["-"] (pkgs.lib.removeSuffix ".effekt" test)}";
+                testPrograms = finalAttrs: map (test: wrap {
+                  pname = testName test;
+                  inherit version makeWrapperArgs;
+                  compiled = compileWith finalAttrs testBackend test {};
                 }) tests;
 
-                # Our arguments stay with us, and everything else is passed on to the package's derivation
                 ourArgs = builtins.attrNames (builtins.functionArgs packageFor);
               in
-              (if backend.kind == "executable" then wrap else mkSite) (builtins.removeAttrs args ourArgs // {
-                inherit pname version;
-                # Unpacked, so the tests run in the project's source, as in its own directory
+              (if backend.kind == "executable" then wrap else mkSite) (finalAttrs: builtins.removeAttrs args ourArgs // {
+                inherit pname version nativeBuildInputs buildInputs preBuild postBuild;
                 src = preparedSrc;
-                compiled = compileWith backend main { inherit moduleName; };
+                compiled = compileWith finalAttrs backend main { inherit moduleName; };
 
                 doCheck = args.doCheck or (tests != []);
-                nativeCheckInputs = (args.nativeCheckInputs or []) ++ testPrograms;
+                nativeCheckInputs = (args.nativeCheckInputs or []) ++ testPrograms finalAttrs;
                 # By name, from 'PATH': a store path here would make the tests a dependency even with 'doCheck = false'
-                checkPhase = ''
+                checkPhase = args.checkPhase or ''
                   runHook preCheck
-                  ${pkgs.lib.concatMapStrings (program: "${program.meta.mainProgram}\n") testPrograms}
+                  ${pkgs.lib.concatMapStrings (test: "${testName test}\n") tests}
                   runHook postCheck
                 '';
 
@@ -840,6 +846,58 @@
             };
             in pkgs.runCommand "check-hooks" {} ''
               ${pkgs.lib.getExe package} | grep -q "Hello, world!"
+              touch $out
+            '';
+
+          # The package's own phases see its arguments: tools in its 'checkPhase'/'postInstall', its own 'checkPhase', and its tests are wrapped like the package
+          argument-routing =
+            let
+              package = effektLib.buildEffektPackage {
+                pname = "check-argument-routing";
+                version = "0.0.0";
+                src = ./tests/hello;
+                main = "main.effekt";
+                tests = ["test.effekt"];
+                nativeBuildInputs = [pkgs.hello];
+                buildInputs = [pkgs.zlib];
+                makeWrapperArgs = ["--set" "CHECK_MARKER" "1"];
+                checkPhase = ''
+                  runHook preCheck
+                  check-argument-routing-test-test
+                  hello > check-ran
+                  runHook postCheck
+                '';
+                postInstall = "cp check-ran $out/check-ran";
+              };
+              test = builtins.head (builtins.filter (d: pkgs.lib.hasPrefix "check-argument-routing-test" (d.name or "")) package.nativeBuildInputs);
+            in
+            assert pkgs.lib.assertMsg (builtins.any (d: d.name == pkgs.zlib.name) package.buildInputs) "the package's derivation must get its 'buildInputs'";
+            pkgs.runCommand "check-argument-routing" {} ''
+              grep -q "Hello, world!" ${package}/check-ran
+              grep -q CHECK_MARKER ${pkgs.lib.getExe test}
+              touch $out
+            '';
+
+          # 'overrideAttrs' reaches the Effekt build: a new source, and hooks with their tools
+          override-attrs =
+            let
+              package = effektLib.buildEffektPackage {
+                pname = "check-override-attrs";
+                version = "0.0.0";
+                src = ./tests/hello;
+                main = "main.effekt";
+              };
+              newSource = package.overrideAttrs { src = pkgs.writeTextDir "main.effekt" ''def main() = println("new source")''; };
+              newHook = package.overrideAttrs (old: {
+                nativeBuildInputs = old.nativeBuildInputs ++ [pkgs.hello];
+                preBuild = ''echo "def main() = println(\"$(hello)\")" > main.effekt'';
+              });
+              patched = package.overrideAttrs { postPatch = "true"; };
+            in
+            assert pkgs.lib.assertMsg (!(builtins.tryEval patched.drvPath).success) "patches on the package's derivation must be refused";
+            pkgs.runCommand "check-override-attrs" {} ''
+              ${pkgs.lib.getExe newSource} | grep -q "new source"
+              ${pkgs.lib.getExe newHook} | grep -q "Hello, world!"
               touch $out
             '';
 
