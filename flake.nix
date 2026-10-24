@@ -400,7 +400,10 @@
               {
                 inherit pname version;
 
-                dontUnpack = true;
+                # Unpacks a source when given one, but never configures or builds it: 'compile' did
+                dontUnpack = !(args ? src);
+                dontConfigure = true;
+                dontBuild = true;
                 nativeBuildInputs = (args.nativeBuildInputs or []) ++ [pkgs.makeWrapper];
 
                 installPhase = ''
@@ -432,7 +435,7 @@
               compiled,                   # a derivation produced by 'compile' with a website backend
               extraFiles ? [],            # project files copied into the site root; later entries win
               ...
-            }:
+            }@args:
               let inherit (compiled.passthru) backend artifactName; in
               assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
                 "mkSite needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
@@ -441,7 +444,10 @@
               {
                 inherit pname version;
 
-                dontUnpack = true;
+                # Unpacks a source when given one, but never configures or builds it: 'compile' did
+                dontUnpack = !(args ? src);
+                dontConfigure = true;
+                dontBuild = true;
                 dontFixup = true;
 
                 installPhase = ''
