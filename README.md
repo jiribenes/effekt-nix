@@ -154,6 +154,12 @@ The other backends are variants, for example `package.override { backends = bs: 
 `flakePackages package` gives you all of them as flake outputs, see the example above.
 Other arguments (`postInstall`, ...) are passed on to the package's derivation.
 
+To use the same Effekt compiler for the package and for the development shell (like the template does), select it once with `getEffekt` and pass it as `effekt` to both:
+```nix
+effekt = effekt-lib.getEffekt { version = "0.82.0"; backends = bs: [ bs.js bs.llvm ]; };
+```
+Without specifying a `version`, you get the latest release (_recommended_!).
+
 `effekt-nix` also supports multiple platforms (see `effekt-nix.lib.supportedSystems`). Use `nixpkgs.lib.genAttrs effekt-nix.lib.supportedSystems` (like the [template](https://github.com/jiribenes/effekt-template/blob/main/flake.nix))
 to define outputs for multiple systems at the same time.
 
