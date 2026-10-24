@@ -107,9 +107,9 @@ You can use this Nix flake directly, but there's also a full template with CI av
       # You can set a fixed Effekt version and your supported backends here:
       effektVersion = "0.3.0";
       backends = bs: [ bs.js bs.llvm ];
-    in {
+
       # A package for your Effekt project
-      packages.${system}.default = effekt-lib.buildEffektPackage {
+      package = effekt-lib.buildEffektPackage {
         pname = "my-effekt-project";
         version = "1.0.0";
         src = ./.;               # Path to your Effekt project
@@ -117,6 +117,9 @@ You can use this Nix flake directly, but there's also a full template with CI av
 
         inherit effektVersion backends;
       };
+    in {
+      # Your package, plus one for each backend (e.g. 'my-effekt-project-llvm')
+      packages.${system} = effekt-lib.flakePackages package // { default = package; };
 
       # Development shell for your project
       devShells.${system}.default = effekt-lib.mkDevShell {
@@ -135,7 +138,7 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 - `tests`: (Optional) A list of test files to run during the build process, with the package's backend (a website's tests run on `js`), each variant runs them with its own.
 - `effekt`: (Optional) A specific Effekt derivation to use. If not provided, it uses the version specified by `effektVersion`.
 - `effektVersion`: The version of Effekt to use (defaults to the latest version).
-- `backends`: A function selecting the backends your project works with, e.g. `bs: [ bs.js bs.llvm ]`. The package is built with the first one that produces an executable (or else the first one) + the others are variants, see below.
+- `backends`: A function selecting the backends your project works with, e.g. `bs: [ bs.js bs.llvm ]`. The package is built with the first one that produces an executable (or else the first one) + the others are variants, see below. `mkDevShell` takes the same function.
 - `buildInputs`: (Optional) Additional build inputs required for your package.
 - `nativeBuildInputs`: (Optional) Additional build-time-only tools, for the build and for `postPatch`.
 - `effektFlags`: (Optional) Flags passed to the Effekt compiler, for example `[ "--no-optimize" ]`.
@@ -146,7 +149,10 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 - `extraFiles`: (Optional) For a website: files copied into the site root.
 - `meta`: (Optional) Package metadata such as `description` or `license`. Note that `mainProgram` is pre-set for you.
 
-The package is one backend's build: a program (`bin/${pname}`, with its artifacts in `libexec/${pname}/`), or for a website backend like `js-web`, the site root itself. Each other selected backend is a variant, `package.override { backends = bs: [ bs.llvm ]; }`, and `flakePackages package` gives each as a flake output (`<pname>-<backend>`, plus `<pname>-all`). Other arguments, such as `postInstall`, are passed on to the package's derivation.
+The package is built with one backend: you get `bin/${pname}`, or the site root for a website backend like `js-web`.
+The other backends are variants, for example `package.override { backends = bs: [ bs.llvm ]; }`.
+`flakePackages package` gives you all of them as flake outputs, see the example above.
+Other arguments (`postInstall`, ...) are passed on to the package's derivation.
 
 `effekt-nix` also supports multiple platforms (see `effekt-nix.lib.supportedSystems`). Use `nixpkgs.lib.genAttrs effekt-nix.lib.supportedSystems` (like the [template](https://github.com/jiribenes/effekt-template/blob/main/flake.nix))
 to define outputs for multiple systems at the same time.
