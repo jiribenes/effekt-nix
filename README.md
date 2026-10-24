@@ -132,20 +132,21 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 - `version`: The version of your package.
 - `src`: The source directory of your Effekt project.
 - `main`: The main Effekt file to compile.
-- `tests`: (Optional) A list of test files to run during the build process.
+- `tests`: (Optional) A list of test files to run during the build process, with the package's backend (a website's tests run on `js`), each variant runs them with its own.
 - `effekt`: (Optional) A specific Effekt derivation to use. If not provided, it uses the version specified by `effektVersion`.
 - `effektVersion`: The version of Effekt to use (defaults to the latest version).
-- `backends`: A function selecting the backends to compile your project with, e.g. `bs: [ bs.js bs.llvm ]`. The first backend in the list is considered the default.
+- `backends`: A function selecting the backends your project works with, e.g. `bs: [ bs.js bs.llvm ]`. The package is built with the first one that produces an executable (or else the first one) + the others are variants, see below.
 - `buildInputs`: (Optional) Additional build inputs required for your package.
-- `nativeBuildInputs`: (Optional) Additional build-time-only tools, such as for `preBuild`.
+- `nativeBuildInputs`: (Optional) Additional build-time-only tools, for the build and for `postPatch`.
 - `effektFlags`: (Optional) Flags passed to the Effekt compiler, for example `[ "--no-optimize" ]`.
+- `patches` / `postPatch`: (Optional) Patches / shell code preparing the source once, before any Effekt build, e.g. generating files.
 - `preBuild` / `postBuild`: (Optional) Shell code to run before / after the Effekt build.
+- `moduleName`: (Optional) The entry point's `module` name, if it differs from its file name (Effekt names its output after the module).
+- `makeWrapperArgs`: (Optional) For an executable: arguments for its wrapper, e.g. `[ "--prefix" "PATH" ":" "${pkgs.git}/bin" ]`.
+- `extraFiles`: (Optional) For a website: files copied into the site root.
 - `meta`: (Optional) Package metadata such as `description` or `license`. Note that `mainProgram` is pre-set for you.
 
-The function will compile your project with all specified backends and create a binary for each:
-`bin/${pname}-${backend}`, plus a symbolic link to the default backend's binary under the `pname`.
-Each backend is built separately, so the backends cannot overwrite each other's files:
-their artifacts live in `libexec/${pname}/${backend}/`, except for `js-web`, whose `.js`/`.html` pair ends up in `share/${pname}/`.
+The package is one backend's build: a program (`bin/${pname}`, with its artifacts in `libexec/${pname}/`), or for a website backend like `js-web`, the site root itself. Each other selected backend is a variant, `package.override { backends = bs: [ bs.llvm ]; }`. Other arguments, such as `postInstall`, are passed on to the package's derivation.
 
 `effekt-nix` also supports multiple platforms (see `effekt-nix.lib.supportedSystems`). Use `nixpkgs.lib.genAttrs effekt-nix.lib.supportedSystems` (like the [template](https://github.com/jiribenes/effekt-template/blob/main/flake.nix))
 to define outputs for multiple systems at the same time.
@@ -186,7 +187,7 @@ The result is a site root: `index.html` plus the compiled `.js`, as real files (
 ### Lower-level building blocks
 
 When a project needs more control than `buildEffektPackage` offers (being a bootloader image, a custom link step,
-an unusual layout or something similar), it can use these primitives directly:
+an unusual layout or something similar), it can use these primitives that `buildEffektPackage` is composed of directly:
 
 - `compile`: compiles a single entry point on a single backend. `$out` is exactly what the Effekt compiler emitted.
   With `mode = "compile"` it stops at the backend representation (e.g. `main.ll`) instead of building a launcher.
@@ -199,7 +200,7 @@ an unusual layout or something similar), it can use these primitives directly:
 
 `wrap` and `mkSite` also take the usual `mkDerivation` arguments (`postInstall`, `meta`, ...).
 A backend can carry its own settings, for example `bs.llvm.override { effektFlags = [ "--optimize" ]; }`
-(`effektFlags`, `makeWrapperArgs` or `extraFiles`), whereas `buildEffektPackage` ignores them (for now).
+(`effektFlags`, `makeWrapperArgs` or `extraFiles`), also in `buildEffektPackage`'s `backends`.
 
 ```nix
 # example: :compile to LLVM IR and link it yourself
