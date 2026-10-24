@@ -146,7 +146,7 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 - `extraFiles`: (Optional) For a website: files copied into the site root.
 - `meta`: (Optional) Package metadata such as `description` or `license`. Note that `mainProgram` is pre-set for you.
 
-The package is one backend's build: a program (`bin/${pname}`, with its artifacts in `libexec/${pname}/`), or for a website backend like `js-web`, the site root itself. Each other selected backend is a variant, `package.override { backends = bs: [ bs.llvm ]; }`. Other arguments, such as `postInstall`, are passed on to the package's derivation.
+The package is one backend's build: a program (`bin/${pname}`, with its artifacts in `libexec/${pname}/`), or for a website backend like `js-web`, the site root itself. Each other selected backend is a variant, `package.override { backends = bs: [ bs.llvm ]; }`, and `flakePackages package` gives each as a flake output (`<pname>-<backend>`, plus `<pname>-all`). Other arguments, such as `postInstall`, are passed on to the package's derivation.
 
 `effekt-nix` also supports multiple platforms (see `effekt-nix.lib.supportedSystems`). Use `nixpkgs.lib.genAttrs effekt-nix.lib.supportedSystems` (like the [template](https://github.com/jiribenes/effekt-template/blob/main/flake.nix))
 to define outputs for multiple systems at the same time.

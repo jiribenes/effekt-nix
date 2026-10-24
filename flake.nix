@@ -446,6 +446,15 @@
               '';
             };
 
+          # A package's backends as flake outputs, '<pname>-<backend>' each plus '<pname>-all';
+          # the prefix keeps two Effekt packages in one flake from silently overwriting each other
+          flakePackages = package:
+            let
+              variants = builtins.listToAttrs (map (b: pkgs.lib.nameValuePair "${package.pname}-${b.name}"
+                (package.override { backends = bs: [(bs.${b.name}.override b.settings)]; })) package.passthru.backends);
+            in
+              variants // { "${package.pname}-all" = pkgs.linkFarm "${package.pname}-all" variants; };
+
           # Builds an Effekt package with a single backend: the first one producing an executable, or else the first one.
           # The other selected backends are variants: `package.override { backends = bs: [bs.llvm]; }`
           buildEffektPackage = pkgs.lib.makeOverridable packageFor;
@@ -556,7 +565,7 @@
                 };
 
         in {
-          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends availableBackends compile wrap mkSite serveSite;
+          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends availableBackends compile wrap mkSite serveSite flakePackages;
         };
     in {
       # Helper functions and types for external use (see 'mkLib')
@@ -781,8 +790,32 @@
           ) checkedVersions);
         in
         perBackend // versionChecks // primitiveChecks // {
-          # Two backends whose artifacts used to overwrite each other in a shared output directory.
-          both-chez = runCheck "both-chez" (bs: [bs.chez-callcc bs.chez-monadic]) "Hello from effekt-nix!";
+          # Two backends whose artifacts used to overwrite each other in a shared output directory: now each is its own variant
+          both-chez =
+            let
+              outputs = effektLib.flakePackages (mkCheckPackage "both-chez" (bs: [bs.chez-callcc bs.chez-monadic]));
+              builtWith = drv: map (b: b.name) drv.passthru.backends;
+            in
+            assert pkgs.lib.assertMsg (builtWith outputs.check-both-chez-chez-callcc == ["chez-callcc"]
+              && builtWith outputs.check-both-chez-chez-monadic == ["chez-monadic"]) "each variant must be built with its own backend";
+            pkgs.runCommand "check-both-chez" {} ''
+              ${pkgs.lib.getExe outputs.check-both-chez-chez-callcc} | grep -q "Hello from effekt-nix!"
+              ${pkgs.lib.getExe outputs.check-both-chez-chez-monadic} | grep -q "Hello from effekt-nix!"
+              touch $out
+            '';
+
+          # A backend's settings survive 'flakePackages', and two packages in one flake do not overwrite each other
+          flake-packages =
+            let
+              outputs = effektLib.flakePackages (mkCheckPackage "web" (bs: [bs.js (bs.js-web.override { extraFiles = [./tests/hello/test.effekt]; })]))
+                // effektLib.flakePackages (mkCheckPackage "other" (bs: [bs.js]));
+            in pkgs.runCommand "check-flake-packages" {} ''
+              test -f ${outputs.check-web-js-web}/test.effekt
+              ${pkgs.lib.getExe outputs.check-web-js} | grep -q "Hello from effekt-nix!"
+              ${pkgs.lib.getExe outputs.check-other-js} | grep -q "Hello from effekt-nix!"
+              test -L ${outputs.check-web-all}/check-web-js-web
+              touch $out
+            '';
 
           # The web backend produces no executable, so the package is its site root
           js-web =
