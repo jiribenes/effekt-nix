@@ -152,6 +152,7 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 The package is built with one backend: you get `bin/${pname}`, or the site root for a website backend like `js-web`.
 The other backends are variants, for example `package.override { backends = bs: [ bs.llvm ]; }`.
 `flakePackages package` gives you all of them as flake outputs, see the example above.
+`variantsOf package` gives them by backend instead (`{ js = ...; llvm = ...; }`).
 Other arguments (`postInstall`, ...) are passed on to the package's derivation.
 
 To use the same Effekt compiler for the package and for the development shell (like the template does), select it once with `getEffekt` and pass it as `effekt` to both:

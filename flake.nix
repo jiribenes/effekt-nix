@@ -446,12 +446,16 @@
               '';
             };
 
+          # A package's variants by backend ('{ js = ...; llvm = ...; }'), each with that backend's settings
+          variantsOf = package: builtins.listToAttrs (map (b: pkgs.lib.nameValuePair b.name
+            (package.override { backends = bs: [(bs.${b.name}.override b.settings)]; })) package.passthru.backends);
+
           # A package's backends as flake outputs, '<pname>-<backend>' each plus '<pname>-all';
           # the prefix keeps two Effekt packages in one flake from silently overwriting each other
           flakePackages = package:
             let
-              variants = builtins.listToAttrs (map (b: pkgs.lib.nameValuePair "${package.pname}-${b.name}"
-                (package.override { backends = bs: [(bs.${b.name}.override b.settings)]; })) package.passthru.backends);
+              variants = pkgs.lib.mapAttrs' (backend: variant: pkgs.lib.nameValuePair "${package.pname}-${backend}" variant)
+                (variantsOf package);
             in
               variants // { "${package.pname}-all" = pkgs.linkFarm "${package.pname}-all" variants; };
 
@@ -571,7 +575,7 @@
                 };
 
         in {
-          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends availableBackends compile wrap mkSite serveSite flakePackages;
+          inherit buildEffektRelease buildEffektFromSource buildEffektPackage getEffekt mkDevShell effektBackends availableBackends compile wrap mkSite serveSite variantsOf flakePackages;
         };
     in {
       # Helper functions and types for external use (see 'mkLib')
@@ -810,12 +814,15 @@
               touch $out
             '';
 
-          # A backend's settings survive 'flakePackages', and two packages in one flake do not overwrite each other
+          # A backend's settings survive 'variantsOf' and 'flakePackages', and two packages in one flake do not overwrite each other
           flake-packages =
             let
-              outputs = effektLib.flakePackages (mkCheckPackage "web" (bs: [bs.js (bs.js-web.override { extraFiles = [./tests/hello/test.effekt]; })]))
-                // effektLib.flakePackages (mkCheckPackage "other" (bs: [bs.js]));
-            in pkgs.runCommand "check-flake-packages" {} ''
+              web = mkCheckPackage "web" (bs: [bs.js (bs.js-web.override { extraFiles = [./tests/hello/test.effekt]; })]);
+              outputs = effektLib.flakePackages web // effektLib.flakePackages (mkCheckPackage "other" (bs: [bs.js]));
+            in
+            assert pkgs.lib.assertMsg (builtins.attrNames (effektLib.variantsOf web) == ["js" "js-web"])
+              "'variantsOf' names the variants by backend";
+            pkgs.runCommand "check-flake-packages" {} ''
               test -f ${outputs.check-web-js-web}/test.effekt
               ${pkgs.lib.getExe outputs.check-web-js} | grep -q "Hello from effekt-nix!"
               ${pkgs.lib.getExe outputs.check-other-js} | grep -q "Hello from effekt-nix!"
