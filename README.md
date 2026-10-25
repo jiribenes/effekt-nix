@@ -126,8 +126,8 @@ These instructions are for packaging an existing one, or for doing more than the
         inherit backends;
       };
     in {
-      # Your package, plus one for each backend (such as 'my-effekt-project-llvm')
-      packages.${system} = effekt-lib.flakePackages package // { default = package; };
+      # Your package, plus one for each backend (such as 'llvm')
+      packages.${system} = effekt-lib.variantsOf package // { default = package; };
 
       # Development shell for your project
       devShells.${system}.default = effekt-lib.mkDevShell {
@@ -143,8 +143,11 @@ Use `nixpkgs.lib.genAttrs effekt-nix.lib.supportedSystems` (like the [template](
 The package is built with a single backend, the output being `bin/${pname}` or the site root for a website backend like `js-web`.
 The other backends are reachable using overrides, for example `package.override { backends = bs: [ bs.llvm ]; }`.
 
-If you want all backends, use `flakePackages package` which gives you all of them as flake outputs, see example above.
-`variantsOf package` gives them by backend instead (`{ js = ...; llvm = ...; }`).
+If you want all backends, use `variantsOf package` which gives you all of them by backend (`{ js = ...; llvm = ...; }`), see example above.
+If you have several different Effekt packages in a single flake, use `flakePackages` instead (as `variantsOf` would collide), which prefixes them with the package's name (such as `server-js`):
+```nix
+packages.${system} = effekt-lib.flakePackages server // effekt-lib.flakePackages client // { default = server; };
+```
 Other arguments (such as `postInstall`) are passed on to the package's derivation.
 Use `package.overrideAttrs` for the derivation's attributes (`src`, `nativeBuildInputs`, `postInstall`, ...) and `package.override` for the Effekt-specific ones (`backends`, `effektFlags`, `patches`, ...).
 
@@ -205,8 +208,8 @@ Compared to the example above, you change the backends, add your assets (if any)
         inherit backends;
       };
     in {
-      # Your package, plus one for each backend (such as 'my-effekt-project-js-web')
-      packages.${system} = effekt-lib.flakePackages package // {
+      # Your package, plus one for each backend (such as 'js-web')
+      packages.${system} = effekt-lib.variantsOf package // {
         default = package;
 
         # Use with 'nix run .#serve' for a preview
@@ -268,8 +271,8 @@ Compared to the example above, you build Effekt from source and pass it as `effe
         inherit backends;
       };
     in {
-      # Your package + one for each backend (such as 'my-effekt-project-llvm')
-      packages.${system} = effekt-lib.flakePackages package // { default = package; };
+      # Your package + one for each backend (such as 'llvm')
+      packages.${system} = effekt-lib.variantsOf package // { default = package; };
 
       # Development shell for your project
       devShells.${system}.default = effekt-lib.mkDevShell {

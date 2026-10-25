@@ -140,9 +140,12 @@
                 if builtins.isFunction backends
                 then backends available
                 else throw "Backends must be selected by a function, e.g. 'bs: [bs.js]' (available backends: ${pkgs.lib.concatStringsSep ", " (builtins.attrNames effektBackends)})";
+              names = map (b: b.name) selected;
+              duplicates = builtins.filter (name: pkgs.lib.count (n: n == name) names > 1) (pkgs.lib.unique names);
             in
               assert pkgs.lib.assertMsg (builtins.isList selected && builtins.all builtins.isAttrs selected) "'backends' must select a list of backends, e.g. 'bs: [bs.js]'";
               assert pkgs.lib.assertMsg (selected != []) "At least one backend must be specified";
+              assert pkgs.lib.assertMsg (duplicates == []) "Each backend can be selected only once (${pkgs.lib.concatStringsSep ", " duplicates} more than once). For another two configs of a single backend, use '.override' on its variant (see 'variantsOf')";
               map (b: available.${b.name}.override (b.settings or {})) selected;
 
           # Selects a single backend for an Effekt version using the given function, e.g. 'bs: bs.llvm'
@@ -909,6 +912,25 @@
               ${pkgs.lib.getExe newHook} | grep -q "Hello, world!"
               touch $out
             '';
+
+          # A backend selected twice is refused (its second configuration would be dropped); '.override' on its variant works
+          duplicate-backends =
+            let
+              refused = drv: !(builtins.tryEval drv.drvPath).success;
+              package = backends: effektLib.buildEffektPackage {
+                pname = "check-duplicate-backends";
+                version = "0.0.0";
+                src = ./tests/hello;
+                main = "main.effekt";
+                inherit backends;
+              };
+              small = (effektLib.variantsOf (package (bs: [bs.js bs.llvm]))).llvm.override { effektFlags = ["--max-inline-size=10"]; };
+            in
+            assert pkgs.lib.assertMsg (refused (package (bs: [bs.llvm (bs.llvm.override { effektFlags = ["--max-inline-size=10"]; })])))
+              "a backend selected twice must be refused";
+            assert pkgs.lib.assertMsg (!(refused (package (bs: [bs.js bs.llvm])))) "distinct backends must still be accepted";
+            assert pkgs.lib.assertMsg (!(refused small)) "'.override' on a variant must work";
+            pkgs.runCommand "check-duplicate-backends" {} "touch $out";
 
           # An entry point given as a Nix path is refused, whether as the package's 'main', in its 'tests', or in 'compile'
           entry-point-strings =
