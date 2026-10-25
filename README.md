@@ -10,7 +10,7 @@ A comprehensive Nix flake for the [Effekt programming language](https://github.c
 - pre-packaged Effekt compiler releases for `x86_64-linux`, `aarch64-linux`, and `aarch64-darwin`, and for any subset of Effekt's backends
 - building the Effekt compiler from source or from a GitHub Release
 - pre-made development shells with Effekt compiler releases and for Effekt compiler development
-- Nix toolchain to build, test, and package apps written in Effekt
+- Nix toolchain to build, test, package, and deploy apps written in Effekt
 
 ## Quick Start
 
@@ -174,7 +174,7 @@ Here's a breakdown of `buildEffektPackage`'s arguments:
 - `preBuild` / `postBuild`: (Optional) Shell code to run before / after the Effekt build.
 - `moduleName`: (Optional) The entry point's `module` name, if it differs from its file name (Effekt names its output after the module).
 - `makeWrapperArgs`: (Optional) For an executable: arguments for its wrapper, for example `[ "--prefix" "PATH" ":" "${pkgs.git}/bin" ]`.
-- `extraFiles`: (Optional) For a website: files copied into the site root.
+- `extraFiles`: (Optional) For a website: project files and directories (as strings relative to `src`, such as `"assets"`), copied to their place in the site.
 - `meta`: (Optional) Package metadata such as `description` or `license`. Note that `mainProgram` is pre-set for you.
 
 ### Building a website (the `js-web` backend)
@@ -202,8 +202,8 @@ Compared to the example above, you change the backends, add your assets (if any)
         src = ./.;               # Path to your Effekt project
         main = "./main.effekt";  # The main Effekt file to run
 
-        # Your assets that will be copied into the site root
-        extraFiles = [ ./public ];
+        # Your assets, at the same place as in your project
+        extraFiles = [ "assets" ];
 
         inherit backends;
       };
@@ -224,7 +224,9 @@ Compared to the example above, you change the backends, add your assets (if any)
 }
 ```
 
-The result is a site root: `index.html` plus the compiled `.js`, as real files (never symlinks, which `serve` answers with a 404), and can be uploaded to GitHub Pages as-is:
+The result is a site root laid out like your project, so the same paths work with and without Nix:
+the page in `out/` (where `effekt` puts it), your `extraFiles` at their place, and an `index.html` that opens the page (unless you list your own which overrides that).
+It can then be uploaded to GitHub Pages as-is:
 
 ```yaml
 - run: nix build

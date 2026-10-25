@@ -390,7 +390,7 @@
               };
           };
 
-          # A website backend's output as a publishable site root, of real files: 'serve' answers a symlink with 404
+          # A website backend's output as a publishable site root laid out like the project (the page in 'out/')
           mkSite = pkgs.lib.extendMkDerivation {
             constructDrv = pkgs.stdenv.mkDerivation;
             excludeDrvArgNames = ["compiled" "extraFiles"];
@@ -398,10 +398,16 @@
               pname,
               version ? "0.0.0",
               compiled,                   # a derivation produced by 'compile' with a website backend
-              extraFiles ? [],            # project files copied into the site root; later entries win
+              extraFiles ? [],            # project files (as strings relative to 'src') copied to their place in the site; later entries win
               ...
             }@args:
-              let inherit (compiled.passthru) backend artifactName; in
+              let
+                inherit (compiled.passthru) backend artifactName;
+                files = extraFiles ++ backend.settings.extraFiles or [];
+              in
+              assert pkgs.lib.assertMsg (builtins.all builtins.isString files)
+                "mkSite needs 'extraFiles' as strings relative to 'src' (such as \"assets\"), not the path ${toString (pkgs.lib.findFirst (f: !builtins.isString f) null files)}";
+              assert pkgs.lib.assertMsg (files == [] || args ? src) "mkSite needs a 'src' to take 'extraFiles' from";
               assert pkgs.lib.assertMsg (compiled.passthru.mode == "build")
                 "mkSite needs a 'compile' with mode = \"build\" (got \"${compiled.passthru.mode}\")";
               assert pkgs.lib.assertMsg (backend.kind == "website")
@@ -418,19 +424,14 @@
                 installPhase = ''
                   runHook preInstall
 
-                  mkdir -p $out
-                  cp -r --no-preserve=mode ${compiled}/. $out/
+                  mkdir -p $out/out
+                  cp -r --no-preserve=mode ${compiled}/. $out/out/
 
-                  mv $out/${artifactName}.html $out/index.html
+                  # The root page, where 'serve' and GitHub Pages open the site; a listed 'index.html' replaces it
+                  echo '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=out/${artifactName}.html">' > $out/index.html
 
-                  # Add extra files / directories
-                  ${pkgs.lib.concatMapStrings (f: ''
-                    if [ -d ${f} ]; then
-                      cp -r --no-preserve=mode ${f}/. $out/
-                    else
-                      cp --no-preserve=mode ${f} $out/$(stripHash ${f})
-                    fi
-                  '') (map (f: pkgs.lib.escapeShellArg "${f}") (extraFiles ++ backend.settings.extraFiles or []))}
+                  # Add extra files / directories, at their place in the project
+                  ${pkgs.lib.concatMapStrings (f: "cp -r --no-preserve=mode --parents ${f} $out/\n") (map pkgs.lib.escapeShellArg files)}
 
                   runHook postInstall
                 '';
@@ -487,7 +488,7 @@
               preBuild ? null,                      # runs before the Effekt build (of the package and of each test)
               postBuild ? null,                     # ... runs after it
               makeWrapperArgs ? [],                 # for an executable: passed to its wrapper
-              extraFiles ? [],                      # for a website: files copied into the site root
+              extraFiles ? [],                      # for a website: project files (as strings relative to 'src') copied to their place in the site
               passthru ? {},
               ...
             }@args:
@@ -723,9 +724,10 @@
             let site = effektLib.mkSite { pname = "check-site"; compiled = compiledFor "js-web"; }; in
             pkgs.runCommand "check-mkSite" {} ''
               test -f ${site}/index.html || { echo "no index.html at the site root"; exit 1; }
-              test -L ${site}/index.html && { echo "index.html is a symlink; sites must be real files"; exit 1; }
-              grep -q 'src="main.js"' ${site}/index.html
-              test -f ${site}/main.js
+              test -L ${site}/out/main.html && { echo "main.html is a symlink; sites must be real files"; exit 1; }
+              grep -q 'url=out/main.html' ${site}/index.html
+              grep -q 'src="main.js"' ${site}/out/main.html
+              test -f ${site}/out/main.js
               touch $out
             '';
 
@@ -736,8 +738,23 @@
               compiled = effektLib.compile { src = renamedSrc; main = "my-main.effekt"; moduleName = "renamed"; backend = bs: bs.js-web; };
             };
             in pkgs.runCommand "check-mkSite-module-name" {} ''
-              grep -q 'src="renamed.js"' ${site}/index.html
-              test -f ${site}/renamed.js
+              grep -q 'url=out/renamed.html' ${site}/index.html
+              grep -q 'src="renamed.js"' ${site}/out/renamed.html
+              test -f ${site}/out/renamed.js
+              touch $out
+            '';
+
+          ## Listed files keep their place in the site and replace what is generated there
+          primitiveChecks.mkSite-extra-files =
+            let
+              site = src: extraFiles: effektLib.mkSite { pname = "check-site-extra-files"; compiled = compiledFor "js-web"; inherit src extraFiles; };
+              ownPage = pkgs.writeTextDir "index.html" "own page";
+            in
+            assert pkgs.lib.assertMsg (!(builtins.tryEval (site ./tests [./tests/hello]).drvPath).success) "a path in 'extraFiles' must be refused";
+            pkgs.runCommand "check-mkSite-extra-files" {} ''
+              test -f ${site ./tests ["hello"]}/hello/main.effekt || { echo "a directory must keep its place"; exit 1; }
+              test -f ${site ./tests ["hello/test.effekt"]}/hello/test.effekt || { echo "a file must keep its place"; exit 1; }
+              grep -q "own page" ${site ownPage ["index.html"]}/index.html || { echo "a listed index.html must replace the root page"; exit 1; }
               touch $out
             '';
 
@@ -748,7 +765,8 @@
               site = effektLib.mkSite {
                 pname = "check-served";
                 compiled = compiledFor "js-web";
-                extraFiles = [./tests/hello];        # an asset that must ship alongside the page
+                src = ./tests/hello;
+                extraFiles = ["main.effekt"];        # an asset that must ship alongside the page
               };
               server = effektLib.serveSite {
                 inherit site;
@@ -769,7 +787,7 @@
 
               get() { curl -fsS --unix-socket "$SOCKET" -o /dev/null "http://localhost$1"; }
               get /             || { echo "site root not served"; exit 1; }
-              get /main.js      || { echo "script not served"; exit 1; }
+              get /out/main.js  || { echo "script not served"; exit 1; }
               get /main.effekt  || { echo "extraFiles not served"; exit 1; }
               touch $out
             '';
@@ -822,7 +840,7 @@
           # A backend's settings survive 'variantsOf' and 'flakePackages', and two packages in one flake do not overwrite each other
           flake-packages =
             let
-              web = mkCheckPackage "web" (bs: [bs.js (bs.js-web.override { extraFiles = [./tests/hello/test.effekt]; })]);
+              web = mkCheckPackage "web" (bs: [bs.js (bs.js-web.override { extraFiles = ["test.effekt"]; })]);
               outputs = effektLib.flakePackages web // effektLib.flakePackages (mkCheckPackage "other" (bs: [bs.js]));
             in
             assert pkgs.lib.assertMsg (builtins.attrNames (effektLib.variantsOf web) == ["js" "js-web"])
@@ -840,8 +858,8 @@
             let package = mkCheckPackage "js-web" (bs: [bs.js-web]);
             in pkgs.runCommand "check-js-web" {} ''
               test -f ${package}/index.html
-              grep -q 'src="main.js"' ${package}/index.html
-              test -f ${package}/main.js
+              grep -q 'src="main.js"' ${package}/out/main.html
+              test -f ${package}/out/main.js
               touch $out
             '';
 
