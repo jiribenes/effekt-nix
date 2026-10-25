@@ -291,7 +291,7 @@
             effektVersion ? latestVersion,
             jvmArgs ? ["-Xss32m"],      # JVM arguments for the compiler
             src,                        # the project's source tree
-            main,                       # (relative) path to the entry point
+            main,                       # the entry point, as a string relative to 'src'
             backend,                    # selects a single backend, e.g. 'bs: bs.llvm'
             mode ? "build",
             effektFlags ? [],
@@ -305,6 +305,8 @@
             pname ? null,
             version ? "0.0.0",
           }@args:
+            assert pkgs.lib.assertMsg (builtins.isString main)
+              "compile needs its entry point as a string relative to 'src' (such as \"src/main.effekt\"), not the path ${toString main}";
             let
               inherit (resolveEffekt args) effektBuild;
               selectedBackend = selectBackend (effektBuild.version or effektVersion) backend;
@@ -907,6 +909,24 @@
               ${pkgs.lib.getExe newHook} | grep -q "Hello, world!"
               touch $out
             '';
+
+          # An entry point given as a Nix path is refused, whether as the package's 'main', in its 'tests', or in 'compile'
+          entry-point-strings =
+            let
+              refused = drv: !(builtins.tryEval drv.drvPath).success;
+              package = args: effektLib.buildEffektPackage ({
+                pname = "check-entry-point-strings";
+                version = "0.0.0";
+                src = ./tests/hello;
+                main = "main.effekt";
+              } // args);
+            in
+            assert pkgs.lib.assertMsg (refused (package { main = ./tests/hello/main.effekt; })) "a path as 'main' must be refused";
+            assert pkgs.lib.assertMsg (refused (package { tests = [./tests/hello/test.effekt]; })) "a path in 'tests' must be refused";
+            assert pkgs.lib.assertMsg (refused (effektLib.compile { src = ./tests/hello; main = ./tests/hello/main.effekt; backend = bs: bs.js; }))
+              "a path as 'compile''s 'main' must be refused";
+            assert pkgs.lib.assertMsg (!(refused (package { tests = ["test.effekt"]; }))) "strings must still be accepted";
+            pkgs.runCommand "check-entry-point-strings" {} "touch $out";
 
           # 'preBuild'/'postBuild' run around the Effekt build itself: before it sees the source, after it wrote its output
           build-hooks =
