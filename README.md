@@ -313,10 +313,10 @@ compiled = effekt-lib.compile {
 # ${compiled}/main.ll is then an ordinary input to any other derivation
 ```
 
-For a development shell with your own tools on top, extend the one from `mkDevShell`:
+`mkDevShell` also takes the usual `mkShell` arguments (`packages`, `shellHook`, ...), for example for your own tools:
 ```nix
-devShells.${system}.default = pkgs.mkShell {
-  inputsFrom = [ (effekt-lib.mkDevShell { inherit backends; }) ];
+devShells.${system}.default = effekt-lib.mkDevShell {
+  inherit backends;
   packages = [ pkgs.llvm ];
 };
 ```

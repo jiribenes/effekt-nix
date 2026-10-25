@@ -545,21 +545,25 @@
                 passthru = passthru // { backends = selectedBackends; };
               } // (if backend.kind == "executable" then { inherit makeWrapperArgs; } else { inherit extraFiles; }));
 
-          # Creates a dev-shell for an Effekt package / version & backends
+          # Creates a dev-shell for an Effekt package / version & backends.
+          # Any extra arguments are passed to 'pkgs.mkShell'
           mkDevShell = {
             effekt ? null,
             effektVersion ? latestVersion,
             backends ? (bs: [bs.js]),
-            jvmArgs ? ["-Xss32m"]
+            jvmArgs ? ["-Xss32m"],
+            ...
           }@args:
             let
               inherit (resolveEffekt args) selectedBackends effektBuild;
+              ourArgs = builtins.attrNames (builtins.functionArgs mkDevShell);
             in
-            pkgs.mkShell {
+            pkgs.mkShell (builtins.removeAttrs args ourArgs // {
               buildInputs = [effektBuild]
                 ++ pkgs.lib.concatMap (b: b.buildInputs) selectedBackends
-                ++ pkgs.lib.concatMap (b: b.runtimeInputs) selectedBackends;
-            };
+                ++ pkgs.lib.concatMap (b: b.runtimeInputs) selectedBackends
+                ++ args.buildInputs or [];
+            });
 
           # Helpful function to get an Effekt package given version and backends
           getEffekt =
@@ -949,6 +953,22 @@
             assert pkgs.lib.assertMsg (!(refused (package (bs: [bs.js bs.llvm])))) "distinct backends must still be accepted";
             assert pkgs.lib.assertMsg (!(refused small)) "'.override' on a variant must work";
             pkgs.runCommand "check-duplicate-backends" {} "touch $out";
+
+          # 'mkDevShell' is 'mkShell' plus the toolchain, i.e., other arguments pass through, the callers' 'buildInputs' are kept
+          dev-shell-arguments =
+            let
+              names = map (d: (builtins.parseDrvName d.name).name);
+              shell = effektLib.mkDevShell {
+                packages = [pkgs.hello];
+                buildInputs = [pkgs.jq];
+                shellHook = "echo check-dev-shell-arguments";
+              };
+            in
+            assert pkgs.lib.assertMsg (builtins.elem "hello" (names shell.nativeBuildInputs)) "'packages' must reach the shell";
+            assert pkgs.lib.assertMsg (builtins.elem "jq" (names shell.buildInputs)) "the caller's 'buildInputs' must be kept";
+            assert pkgs.lib.assertMsg (builtins.elem "effekt" (names shell.buildInputs)) "the compiler must stay in the shell";
+            assert pkgs.lib.assertMsg (pkgs.lib.hasInfix "echo check-dev-shell-arguments" shell.shellHook) "'shellHook' must reach the shell";
+            pkgs.runCommand "check-dev-shell-arguments" {} "touch $out";
 
           # An entry point given as a Nix path is refused, whether as the package's 'main', in its 'tests', or in 'compile'
           entry-point-strings =
