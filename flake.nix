@@ -73,7 +73,8 @@
               name = "llvm";
               extension = ".ll";
               minVersion = "0.2.2";
-              buildInputs = [clangWithVersionAliases pkgs.llvm pkgs.libuv]; # Supporting older versions of Effekt that used `llc`/`opt`
+              buildInputs = [clangWithVersionAliases pkgs.llvm pkgs.libuv]  # Supporting older versions of Effekt that used `llc`/`opt`
+                ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isDarwin [pkgs.lld]; # Effekt links with LLD on MacOS ARM64
               runtimeInputs = [pkgs.libuv];                                 # Only libuv needed at runtime
               compilerEnv = { # Explicitly add libuv to CPATH and LIBRARY_PATH env vars
                 CPATH = pkgs.lib.makeIncludePath [pkgs.libuv];
